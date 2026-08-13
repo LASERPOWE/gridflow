@@ -6,6 +6,8 @@ import { PillRenderer, inr } from './lib/cells.jsx'
 import Login from './components/Login.jsx'
 import ImportModal from './components/ImportModal.jsx'
 import IconRail from './components/IconRail.jsx'
+import Notifications from './components/Notifications.jsx'
+import RequestAccess from './components/RequestAccess.jsx'
 
 // Fixed column colors (Smartsheet-style), matched by column key/label keywords.
 function colorClass(key, label) {
@@ -17,7 +19,7 @@ function colorClass(key, label) {
 }
 
 function Workspace() {
-  const { profile, role, signOut, canWrite } = useAuth()
+  const { profile, role, signOut, canWrite, isApprover } = useAuth()
   const [tree, setTree] = useState([])
   const [firstWsId, setFirstWsId] = useState(null)
   const [sheet, setSheet] = useState(null)
@@ -28,6 +30,9 @@ function Workspace() {
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
   const [view, setView] = useState('browse')
+  const [showNotif, setShowNotif] = useState(false)
+  const [notifCount, setNotifCount] = useState(0)
+  const [showReq, setShowReq] = useState(false)
   const gridRef = useRef()
 
   const initials = (profile?.full_name || profile?.email || 'U').trim().slice(0, 2).toUpperCase()
@@ -129,7 +134,8 @@ function Workspace() {
 
   return (
     <div className="shell">
-      <IconRail view={view} onView={setView} onCreate={newSheet} onSearch={focusSearch} initials={initials} />
+      <IconRail view={view} onView={setView} onCreate={newSheet} onSearch={focusSearch}
+        onNotif={() => setShowNotif(v => !v)} notifCount={notifCount} initials={initials} />
 
       {/* tree */}
       <div className="tree">
@@ -189,6 +195,7 @@ function Workspace() {
           <button className="tbtn" title="Filter">⛃ Filter</button>
           <button className="tbtn" title="Sort">↕ Sort</button>
           <button className="tbtn" onClick={() => setShowImport(true)}>⬇ Import from Smartsheet</button>
+          {sheet && !canWrite && <button className="tbtn" onClick={() => setShowReq(true)}>🔒 Request access</button>}
           <span className="spacer" />
           <input id="gf-search" className="search" placeholder="🔍 Search…" value={quick} onChange={e => setQuickFilter(e.target.value)} />
           <span className="count">{rows.length} rows</span>
@@ -209,6 +216,10 @@ function Workspace() {
       {showImport && (
         <ImportModal workspaceId={firstWsId} onClose={() => setShowImport(false)} onDone={(s) => { setShowImport(false); loadTree(s.id) }} />
       )}
+
+      {showReq && <RequestAccess sheet={sheet} onClose={() => setShowReq(false)} />}
+
+      <Notifications open={showNotif} onClose={() => setShowNotif(false)} isApprover={isApprover} onCount={setNotifCount} />
     </div>
   )
 }

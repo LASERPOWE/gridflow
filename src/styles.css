@@ -130,3 +130,51 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--ss-blue);border-
 .steps{font-size:12.5px;line-height:1.7}.steps code{background:var(--panel);padding:1px 5px;border-radius:3px}
 
 @media (max-width:820px){.shell{grid-template-columns:52px 1fr}.tree{display:none}}
+
+/* ===== Notifications panel (Smartsheet-style) ===== */
+.notif-overlay{position:fixed;inset:0;z-index:60}
+.notif-panel{position:fixed;top:0;left:64px;bottom:0;width:340px;z-index:61;background:#fff;
+  box-shadow:2px 0 24px rgba(0,0,0,.18);display:flex;flex-direction:column;font-family:var(--font)}
+.notif-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 8px}
+.notif-title{font-size:17px;font-weight:700;color:#1b1f2b}
+.notif-x{border:0;background:none;font-size:15px;color:#69707d;cursor:pointer;padding:4px}
+.notif-tabs{display:flex;gap:20px;padding:0 18px;border-bottom:1px solid #e7eaf0}
+.notif-tab{border:0;background:none;padding:8px 0 10px;font-size:13.5px;color:#69707d;cursor:pointer;
+  border-bottom:2px solid transparent;font-weight:600}
+.notif-tab.on{color:var(--ss-blue);border-bottom-color:var(--ss-blue)}
+.notif-list{flex:1;overflow-y:auto}
+.notif-empty{padding:40px 18px;text-align:center;color:#9aa1ad;font-size:13px}
+.notif-item{display:flex;gap:12px;padding:14px 18px;border-bottom:1px solid #eef1f5;position:relative;align-items:flex-start}
+.notif-item.unread{background:#f6f9ff}
+.notif-av{flex:0 0 auto;width:34px;height:34px;border-radius:50%;color:#fff;font-weight:700;font-size:14px;
+  display:grid;place-items:center}
+.notif-body{flex:1;min-width:0}
+.notif-line{font-size:13px;color:#2a2f3a;line-height:1.45}
+.notif-line b{font-weight:600}
+.notif-meta{font-size:11.5px;color:#8a91a0;margin-top:4px}
+.notif-msg{font-size:12px;color:#69707d;margin-top:5px;font-style:italic}
+.notif-dot{position:absolute;top:18px;right:16px;width:9px;height:9px;border-radius:50%;background:var(--ss-blue)}
+.notif-pill{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:6px;vertical-align:middle}
+.notif-pill.ok{background:#e2f5e7;color:#1a7f37}
+.notif-pill.no{background:#fde2e2;color:#c22b2b}
+.notif-actions{display:flex;gap:8px;margin-top:9px}
+.notif-btn{border:0;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer}
+.notif-btn.approve{background:var(--ss-blue);color:#fff}
+.notif-btn.deny{background:#eef1f5;color:#3a3f4b}
+.notif-btn:disabled{opacity:.6;cursor:default}
+
+/* ===== Request access modal ===== */
+.modal-overlay{position:fixed;inset:0;background:rgba(20,25,40,.35);z-index:70}
+.modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:71;background:#fff;
+  width:400px;max-width:92vw;border-radius:10px;box-shadow:0 18px 60px rgba(0,0,0,.28);font-family:var(--font);overflow:hidden}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;
+  background:var(--ss-blue);color:#fff;font-weight:700;font-size:15px}
+.modal-x{border:0;background:none;color:#fff;font-size:15px;cursor:pointer}
+.modal-body{padding:18px}
+.modal-body label{display:block;font-size:12px;color:#69707d;margin:10px 0 5px;font-weight:600}
+.modal-body textarea{width:100%;border:1px solid #d5dae3;border-radius:7px;padding:9px;font-family:var(--font);font-size:13px;resize:vertical}
+.req-sub{font-size:13.5px;color:#2a2f3a;margin:0}
+.req-done{padding:26px 22px;text-align:center}
+.req-check{width:52px;height:52px;border-radius:50%;background:#e2f5e7;color:#1a7f37;font-size:26px;
+  display:grid;place-items:center;margin:0 auto 14px}
+.req-done p{font-size:13.5px;color:#3a3f4b;line-height:1.5;margin:0 0 16px}
