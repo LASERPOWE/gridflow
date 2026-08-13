@@ -2,11 +2,15 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth.jsx'
 
-const ROLES = ['super_admin', 'org_admin', 'dept_admin', 'manager', 'editor', 'viewer', 'contractor']
+// super_admin is intentionally NOT selectable — it stays locked to one person.
+const ROLES = ['org_admin', 'dept_admin', 'manager', 'editor', 'viewer', 'contractor']
+const ADMIN_ROLES = ['super_admin', 'org_admin', 'dept_admin', 'manager']
+const SUPER_ADMIN_EMAIL = 'samrat.dey@laserpowerinfra.com'
+const ADMIN_CAP = 5
 
 export default function AdminPanel() {
   const { profile } = useAuth()
-  const [tab, setTab] = useState('users')      // users | allowlist | requests
+  const [tab, setTab] = useState('users')      // users | allowlist | requests | migrate
   const [users, setUsers] = useState([])
   const [allow, setAllow] = useState([])
   const [reqs, setReqs] = useState([])
@@ -25,9 +29,20 @@ export default function AdminPanel() {
   }, [])
   useEffect(() => { load() }, [load])
 
-  async function changeRole(id, role) {
+  const adminCount = users.filter(u => ADMIN_ROLES.includes(u.global_role)).length
+
+  async function changeRole(u, role) {
+    // Guard 1: super_admin is locked to the one account.
+    if (u.email === SUPER_ADMIN_EMAIL) { setMsg('Super Admin is locked and cannot be changed.'); return }
+    if (role === 'super_admin') { setMsg('Only the locked Super Admin account can have that role.'); return }
+    // Guard 2: enforce the admin cap when promoting to an admin role.
+    const wasAdmin = ADMIN_ROLES.includes(u.global_role)
+    const willBeAdmin = ADMIN_ROLES.includes(role)
+    if (!wasAdmin && willBeAdmin && adminCount >= ADMIN_CAP) {
+      setMsg(`Admin limit reached (${ADMIN_CAP}). Remove an admin first.`); return
+    }
     setBusy(true)
-    const { error } = await supabase.from('profiles').update({ global_role: role }).eq('id', id)
+    const { error } = await supabase.from('profiles').update({ global_role: role }).eq('id', u.id)
     setBusy(false)
     if (error) return setMsg('Error: ' + error.message)
     setMsg('Role updated'); load()
@@ -64,26 +79,35 @@ export default function AdminPanel() {
         <button className={tab === 'users' ? 'on' : ''} onClick={() => setTab('users')}>Users ({users.length})</button>
         <button className={tab === 'allowlist' ? 'on' : ''} onClick={() => setTab('allowlist')}>Allowed emails ({allow.length})</button>
         <button className={tab === 'requests' ? 'on' : ''} onClick={() => setTab('requests')}>Requests ({pending.length})</button>
+        <button className={tab === 'migrate' ? 'on' : ''} onClick={() => setTab('migrate')}>Migrate from Smartsheet</button>
       </div>
       {msg && <div className="admin-msg">{msg}</div>}
 
       {tab === 'users' && (
         <div className="admin-card">
+          <p className="admin-hint">Admins: <b>{adminCount}/{ADMIN_CAP}</b> used. Super Admin is locked to one account.</p>
           <table className="admin-table">
             <thead><tr><th>Name</th><th>Email</th><th>Role</th></tr></thead>
             <tbody>
-              {users.map(u => (
-                <tr key={u.id}>
-                  <td>{u.full_name || '—'}</td>
-                  <td>{u.email}</td>
-                  <td>
-                    <select value={u.global_role || 'viewer'} disabled={busy}
-                      onChange={e => changeRole(u.id, e.target.value)}>
-                      {ROLES.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
-                    </select>
-                  </td>
-                </tr>
-              ))}
+              {users.map(u => {
+                const locked = u.email === SUPER_ADMIN_EMAIL
+                return (
+                  <tr key={u.id}>
+                    <td>{u.full_name || '—'}</td>
+                    <td>{u.email}</td>
+                    <td>
+                      {locked ? (
+                        <span className="admin-lock">🔒 Super Admin</span>
+                      ) : (
+                        <select value={u.global_role || 'viewer'} disabled={busy}
+                          onChange={e => changeRole(u, e.target.value)}>
+                          {ROLES.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                        </select>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
               {users.length === 0 && <tr><td colSpan={3} className="admin-empty">No users yet.</td></tr>}
             </tbody>
           </table>
@@ -131,6 +155,26 @@ export default function AdminPanel() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === 'migrate' && (
+        <div className="admin-card">
+          <h3 style={{ margin: '0 0 6px', fontSize: 16 }}>Migrate from Smartsheet</h3>
+          <p className="admin-hint">
+            Bring all sheets, columns and rows from your Smartsheet organisation into this app.
+          </p>
+          <div className="migrate-steps">
+            <div className="migrate-step"><b>1. Connect</b> — Paste a Smartsheet API token (Smartsheet → Personal Settings → API Access).</div>
+            <div className="migrate-step"><b>2. Scan</b> — We list every workspace, folder and sheet in your Smartsheet org.</div>
+            <div className="migrate-step"><b>3. Map</b> — Each Smartsheet sheet becomes a sheet here; columns and rows are copied 1:1.</div>
+            <div className="migrate-step"><b>4. Import</b> — Data is pulled in batches; you can re-run to sync updates.</div>
+          </div>
+          <button className="btn" style={{ marginTop: 16 }} disabled
+            title="Coming soon">🚀 Start migration (coming soon)</button>
+          <p style={{ marginTop: 10, color: '#69707d', fontSize: 12 }}>
+            Planned for a future update. The Smartsheet connector and token flow will be enabled here.
+          </p>
         </div>
       )}
     </div>

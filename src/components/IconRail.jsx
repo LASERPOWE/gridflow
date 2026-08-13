@@ -8,28 +8,28 @@ function Item({ icon, label, active, badge, onClick }) {
   )
 }
 
-export default function IconRail({ view, onView, onCreate, onSearch, onNotif, notifCount, initials, isAdmin }) {
+export default function IconRail({ view, onView, onCreate, onSearch, onNotif, notifCount, initials, isAdmin, onProfile }) {
   return (
     <nav className="rail">
       <div className="rail-top">
         <div className="rail-brand" title="smartsheet by Laser Power">
-          <svg width="20" height="20" viewBox="0 0 24 24"><rect x="1" y="1" width="22" height="22" rx="5" fill="#fff"/><path d="M6 12.5l3.5 3.5L18 7.5" stroke="#2f5bd6" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <svg width="22" height="22" viewBox="0 0 24 24"><rect x="1" y="1" width="22" height="22" rx="6" fill="#fff"/><path d="M6 12.5l3.5 3.5L18 7.5" stroke="#2f5bd6" strokeWidth="2.6" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </div>
         <Item icon="🏠" label="Home" active={view === 'home'} onClick={() => onView('home')} />
         <Item icon="🔔" label="Notifications" badge={notifCount || 0} onClick={onNotif} />
         <Item icon="🔍" label="Search" onClick={onSearch} />
         <Item icon="🗂" label="Browse" active={view === 'browse'} onClick={() => onView('browse')} />
-        <Item icon="🕘" label="Recents" onClick={() => onView('browse')} />
-        <Item icon="⭐" label="Favorites" onClick={() => onView('browse')} />
-        <Item icon="🧩" label="Resource Management" onClick={() => onView('browse')} />
-        <Item icon="🧱" label="WorkApps" onClick={() => onView('browse')} />
+        <Item icon="🕘" label="Recents" active={view === 'recents'} onClick={() => onView('recents')} />
+        <Item icon="⭐" label="Favorites" active={view === 'favorites'} onClick={() => onView('favorites')} />
+        <Item icon="🧩" label="Resource Management" onClick={() => onView('resource')} />
+        <Item icon="🧱" label="WorkApps" onClick={() => onView('workapps')} />
         <Item icon="➕" label="Create" onClick={onCreate} />
         {isAdmin && <Item icon="🛡" label="Admin" active={view === 'admin'} onClick={() => onView('admin')} />}
       </div>
       <div className="rail-bottom">
-        <Item icon="▦" label="Apps" onClick={() => onView('browse')} />
-        <Item icon="❔" label="Help" onClick={() => onView('home')} />
-        <button className="rail-avatar" title="Profile">{initials || 'U'}</button>
+        <Item icon="▦" label="Apps" onClick={() => onView('apps')} />
+        <Item icon="❔" label="Help" onClick={() => onView('help')} />
+        <button className="rail-avatar" title="Profile" onClick={onProfile}>{initials || 'U'}</button>
       </div>
     </nav>
   )
