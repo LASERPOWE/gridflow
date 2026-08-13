@@ -8,7 +8,7 @@ function Item({ icon, label, active, badge, onClick }) {
   )
 }
 
-export default function IconRail({ view, onView, onCreate, onSearch, initials }) {
+export default function IconRail({ view, onView, onCreate, onSearch, onNotif, notifCount, initials }) {
   return (
     <nav className="rail">
       <div className="rail-top">
@@ -16,7 +16,7 @@ export default function IconRail({ view, onView, onCreate, onSearch, initials })
           <svg width="20" height="20" viewBox="0 0 24 24"><rect x="1" y="1" width="22" height="22" rx="5" fill="#fff"/><path d="M6 12.5l3.5 3.5L18 7.5" stroke="#2f5bd6" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </div>
         <Item icon="🏠" label="Home" active={view === 'home'} onClick={() => onView('home')} />
-        <Item icon="🔔" label="Notifications" badge={2} onClick={() => onView('home')} />
+        <Item icon="🔔" label="Notifications" badge={notifCount || 0} onClick={onNotif} />
         <Item icon="🔍" label="Search" onClick={onSearch} />
         <Item icon="🗂" label="Browse" active={view === 'browse'} onClick={() => onView('browse')} />
         <Item icon="🕘" label="Recents" onClick={() => onView('browse')} />
