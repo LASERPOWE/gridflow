@@ -30,6 +30,7 @@ export function AuthProvider({ children }) {
     session, user: session?.user || null, profile, role, loading,
     canWrite: WRITE.includes(role),
     isAdmin: ['super_admin', 'org_admin'].includes(role),
+    isApprover: ['super_admin', 'org_admin', 'dept_admin', 'manager'].includes(role),
     signIn: (e, p) => supabase.auth.signInWithPassword({ email: e, password: p }),
     signUp: (e, p, n) => supabase.auth.signUp({ email: e, password: p, options: { data: { full_name: n } } }),
     signOut: () => supabase.auth.signOut(),
