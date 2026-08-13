@@ -1,1 +1,10 @@
-import React from 'react'; import ReactDOM from 'react-dom/client'; import App from './App.jsx'; import './styles.css'; import 'ag-grid-community/styles/ag-grid.css'; import 'ag-grid-community/styles/ag-theme-quartz.css'; const CSS = "@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap');#splash{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(160deg,#2f5bd6 0%,#3b46c8 55%,#4a3fc0 100%);font-family:Manrope,sans-serif;transition:opacity .5s ease}#splash.hide{opacity:0}#splash .nm{color:#fff;font-weight:700;font-size:40px;letter-spacing:-1px}#splash .by{color:rgba(255,255,255,.72);font-weight:500;font-size:13px;letter-spacing:3px;margin-top:8px}#splash .bar{margin-top:22px;width:150px;height:2px;background:rgba(255,255,255,.22);border-radius:2px;overflow:hidden}#splash .bar i{display:block;height:100%;width:40%;background:#fff;border-radius:2px;animation:sl 1.1s ease-in-out infinite}@keyframes sl{0%{transform:translateX(-120%)}100%{transform:translateX(320%)}}"; const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st); const sp = document.createElement('div'); sp.id = 'splash'; sp.innerHTML = '<div style="display:flex;align-items:center;gap:12px"><svg width="30" height="30" viewBox="0 0 24 24"><rect x="1" y="1" width="22" height="22" rx="5" fill="#fff"></rect><path d="M6 12.5l3.5 3.5L18 7.5" stroke="#2f5bd6" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg><span class="nm">smartsheet</span></div><div class="by">by Laser Power</div><div class="bar"><i></i></div>'; document.body.appendChild(sp); setTimeout(function(){ sp.classList.add('hide'); setTimeout(function(){ sp.remove(); }, 600); }, 1800); ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(React.StrictMode, null, React.createElement(App)));
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import './styles.css'
+import 'ag-grid-community/styles/ag-grid.css'
+import 'ag-grid-community/styles/ag-theme-quartz.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode><App /></React.StrictMode>
+)
