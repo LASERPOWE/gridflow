@@ -193,8 +193,19 @@ function Workspace() {
       <>
       {/* tree */}
       <div className="tree">
-        <div className="head"><span>Sheets</span><button title="New sheet" onClick={newSheet}>+</button></div>
-        {tree.length === 0 && <div className="empty" style={{ padding: '20px 14px', fontSize: 12 }}>No sheets yet.</div>}
+        <div className="head"><span>Sheets</span>{canWrite && <button title="New sheet" onClick={newSheet}>+</button>}</div>
+        {tree.length === 0 && (
+          <div className="empty tree-empty" style={{ padding: '24px 14px', fontSize: 12.5 }}>
+            {canWrite ? 'No sheets yet.' : (
+              <>
+                <div style={{ fontSize: 26, marginBottom: 8 }}>🔒</div>
+                <div style={{ fontWeight: 600, color: '#3a3f4b', marginBottom: 4 }}>No sheets shared with you yet</div>
+                <div style={{ color: '#8a91a0', marginBottom: 12 }}>Ask an admin for access to a sheet or folder.</div>
+                <button className="btn sm" onClick={() => setShowReq(true)}>Request access</button>
+              </>
+            )}
+          </div>
+        )}
         {tree.map(o => (
           <div key={o.id}>
             <div className="node ws"><span className="ico">🏢</span>{o.name}</div>
