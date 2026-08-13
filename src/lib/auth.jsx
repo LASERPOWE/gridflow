@@ -14,7 +14,7 @@ export function AuthProvider({ children }) {
 
   async function loadProfile(id) {
     if (!id) return setProfile(null)
-    const { data } = await supabase.from('profiles').select('*').eq('id', id).single()
+    const { data } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle()
     setProfile(data || null)
   }
 
@@ -45,13 +45,23 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
+    let done = false
+    // If we're returning from an OAuth redirect (token in URL hash), keep showing
+    // the loader until onAuthStateChange delivers the session — avoids a flash of Login.
+    const hasOAuthHash = typeof window !== 'undefined' && /access_token=|code=/.test(window.location.hash + window.location.search)
+
     supabase.auth.getSession().then(async ({ data }) => {
-      if (data.session && !(await checkAllowed(data.session))) { setLoading(false); return }
-      setSession(data.session); await loadProfile(data.session?.user?.id); setLoading(false)
+      if (done) return
+      if (!data.session && hasOAuthHash) return  // wait for the listener; stay loading
+      if (data.session && !(await checkAllowed(data.session))) { setLoading(false); done = true; return }
+      setSession(data.session); await loadProfile(data.session?.user?.id)
+      setLoading(false); done = true
     })
+
     const { data: sub } = supabase.auth.onAuthStateChange(async (_e, s) => {
-      if (s && !(await checkAllowed(s))) return
+      if (s && !(await checkAllowed(s))) { setLoading(false); done = true; return }
       setSession(s); await loadProfile(s?.user?.id)
+      setLoading(false); done = true
     })
     return () => sub.subscription.unsubscribe()
   }, [])
