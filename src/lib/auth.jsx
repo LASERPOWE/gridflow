@@ -17,12 +17,21 @@ export function AuthProvider({ children }) {
     setProfile(data || null)
   }
 
-  // Allowlist gate: if the signed-in email isn't allowed, sign out.
+  // Allowlist gate: sign out only if the email is CONFIRMED absent.
+  // On any query error we fail-open (allow) so a transient hiccup never locks a valid user out.
   async function checkAllowed(s) {
     const email = s?.user?.email
     if (!email) return true
-    const { data } = await supabase.from('allowed_emails').select('email').ilike('email', email).maybeSingle()
-    if (!data) {
+    let found = false, confirmed = false
+    for (let attempt = 0; attempt < 2 && !found; attempt++) {
+      const { data, error } = await supabase
+        .from('allowed_emails').select('email').ilike('email', email)
+      if (error) { confirmed = false; break }      // query failed → don't deny
+      confirmed = true
+      if (data && data.length > 0) { found = true; break }
+      await new Promise(r => setTimeout(r, 400))    // brief retry for propagation
+    }
+    if (confirmed && !found) {
       setDenied(email)
       await supabase.auth.signOut()
       setSession(null); setProfile(null)
