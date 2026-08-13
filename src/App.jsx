@@ -8,6 +8,7 @@ import ImportModal from './components/ImportModal.jsx'
 import IconRail from './components/IconRail.jsx'
 import Notifications from './components/Notifications.jsx'
 import RequestAccess from './components/RequestAccess.jsx'
+import Loader from './components/Loader.jsx'
 
 // Fixed column colors (Smartsheet-style), matched by column key/label keywords.
 function colorClass(key, label) {
@@ -33,10 +34,25 @@ function Workspace() {
   const [showNotif, setShowNotif] = useState(false)
   const [notifCount, setNotifCount] = useState(0)
   const [showReq, setShowReq] = useState(false)
+  const [busy, setBusy] = useState(true)      // loader overlay (app start + transitions)
+  const [busyLabel, setBusyLabel] = useState('')
   const gridRef = useRef()
 
   const initials = (profile?.full_name || profile?.email || 'U').trim().slice(0, 2).toUpperCase()
   const focusSearch = () => document.getElementById('gf-search')?.focus()
+
+  // Briefly show the loader (min duration so the animation reads as intentional).
+  function flash(label, ms = 650) {
+    setBusyLabel(label || ''); setBusy(true)
+    window.clearTimeout(flash._t)
+    flash._t = window.setTimeout(() => setBusy(false), ms)
+  }
+  // Loader on view (rail) change.
+  function changeView(v) {
+    if (v === view) return
+    flash(v.charAt(0).toUpperCase() + v.slice(1))
+    setView(v)
+  }
 
   async function loadTree(selectId) {
     const [o, d, w, s] = await Promise.all([
@@ -53,15 +69,18 @@ function Workspace() {
     const target = selectId ? S.find(x => x.id === selectId) : (sheet ? S.find(x => x.id === sheet.id) : S[0])
     if (target) selectSheet(target)
   }
-  useEffect(() => { loadTree() }, []) // eslint-disable-line
+  useEffect(() => { loadTree().finally(() => window.setTimeout(() => setBusy(false), 500)) }, []) // eslint-disable-line
 
   async function selectSheet(s) {
+    const switching = !sheet || sheet.id !== s.id
+    if (switching) { setBusyLabel(s.name); setBusy(true) }
     setSheet(s); setLoading(true); setErr('')
     const { data: c } = await supabase.from('sheet_columns').select('*').eq('sheet_id', s.id).order('position')
     setCols(c || [])
     const { data: r, error } = await supabase.from('rows').select('*').eq('sheet_id', s.id).order('created_at').limit(5000)
     if (error) setErr(error.message)
     setRows(r || []); setLoading(false)
+    if (switching) window.setTimeout(() => setBusy(false), 450)
   }
 
   const isWO = sheet?.kind === 'work_orders'
@@ -134,7 +153,7 @@ function Workspace() {
 
   return (
     <div className="shell">
-      <IconRail view={view} onView={setView} onCreate={newSheet} onSearch={focusSearch}
+      <IconRail view={view} onView={changeView} onCreate={newSheet} onSearch={focusSearch}
         onNotif={() => setShowNotif(v => !v)} notifCount={notifCount} initials={initials} />
 
       {/* tree */}
@@ -220,6 +239,8 @@ function Workspace() {
       {showReq && <RequestAccess sheet={sheet} onClose={() => setShowReq(false)} />}
 
       <Notifications open={showNotif} onClose={() => setShowNotif(false)} isApprover={isApprover} onCount={setNotifCount} />
+
+      <Loader show={busy} label={busyLabel} />
     </div>
   )
 }
