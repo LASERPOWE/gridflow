@@ -4,6 +4,7 @@ import { supabase } from './supabase'
 const Ctx = createContext(null)
 export const useAuth = () => useContext(Ctx)
 const WRITE = ['super_admin', 'org_admin', 'dept_admin', 'manager', 'editor']
+const ADMIN_ROLES = ['super_admin', 'org_admin', 'dept_admin', 'manager']
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
@@ -17,26 +18,45 @@ export function AuthProvider({ children }) {
     setProfile(data || null)
   }
 
-  // Allowlist gate: sign out only if the email is CONFIRMED absent.
-  // On any query error we fail-open (allow) so a transient hiccup never locks a valid user out.
+  async function denyAndOut(reason) {
+    setDenied(reason)
+    await supabase.auth.signOut()
+    setSession(null); setProfile(null)
+    return false
+  }
+
+  // Gate: enforce per-tab rules, fail-open on transient errors.
+  //  - Google (provider 'google'): must be @laserpowerinfra.com AND on allowlist.
+  //  - Email/password (provider 'email'): admin role required (Admin tab).
   async function checkAllowed(s) {
     const email = s?.user?.email
     if (!email) return true
+    const provider = s?.user?.app_metadata?.provider || 'email'
+
+    // Rule 1: Google logins restricted to company domain.
+    if (provider === 'google' && !email.toLowerCase().endsWith('@laserpowerinfra.com')) {
+      return denyAndOut(email)
+    }
+
+    // Rule 2: confirm the email is on the allowlist (skip deny on query error).
     let found = false, confirmed = false
     for (let attempt = 0; attempt < 2 && !found; attempt++) {
-      const { data, error } = await supabase
-        .from('allowed_emails').select('email').ilike('email', email)
-      if (error) { confirmed = false; break }      // query failed → don't deny
+      const { data, error } = await supabase.from('allowed_emails').select('email').ilike('email', email)
+      if (error) { confirmed = false; break }
       confirmed = true
       if (data && data.length > 0) { found = true; break }
-      await new Promise(r => setTimeout(r, 400))    // brief retry for propagation
+      await new Promise(r => setTimeout(r, 400))
     }
-    if (confirmed && !found) {
-      setDenied(email)
-      await supabase.auth.signOut()
-      setSession(null); setProfile(null)
-      return false
+    if (confirmed && !found) return denyAndOut(email)
+
+    // Rule 3: Admin tab (email/password) is admins-only.
+    if (provider === 'email') {
+      const { data: p, error } = await supabase.from('profiles').select('global_role').eq('id', s.user.id).maybeSingle()
+      if (!error && p && !ADMIN_ROLES.includes(p.global_role)) {
+        return denyAndOut('NOT_ADMIN')
+      }
     }
+
     setDenied('')
     return true
   }
