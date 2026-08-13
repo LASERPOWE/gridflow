@@ -25,31 +25,14 @@ export function AuthProvider({ children }) {
     return false
   }
 
-  // Gate: enforce per-tab rules, fail-open on transient errors.
-  //  - Google (provider 'google'): must be @laserpowerinfra.com AND on allowlist.
-  //  - Email/password (provider 'email'): admin role required (Admin tab).
+  // Gate: open access — anyone can sign in with Google (no domain / no allowlist).
+  //  - Email/password (provider 'email', Admin tab): admin role still required.
   async function checkAllowed(s) {
     const email = s?.user?.email
     if (!email) return true
     const provider = s?.user?.app_metadata?.provider || 'email'
 
-    // Rule 1: Google logins restricted to company domain.
-    if (provider === 'google' && !email.toLowerCase().endsWith('@laserpowerinfra.com')) {
-      return denyAndOut(email)
-    }
-
-    // Rule 2: confirm the email is on the allowlist (skip deny on query error).
-    let found = false, confirmed = false
-    for (let attempt = 0; attempt < 2 && !found; attempt++) {
-      const { data, error } = await supabase.from('allowed_emails').select('email').ilike('email', email)
-      if (error) { confirmed = false; break }
-      confirmed = true
-      if (data && data.length > 0) { found = true; break }
-      await new Promise(r => setTimeout(r, 400))
-    }
-    if (confirmed && !found) return denyAndOut(email)
-
-    // Rule 3: Admin tab (email/password) is admins-only.
+    // Admin tab (email/password) stays admins-only.
     if (provider === 'email') {
       const { data: p, error } = await supabase.from('profiles').select('global_role').eq('id', s.user.id).maybeSingle()
       if (!error && p && !ADMIN_ROLES.includes(p.global_role)) {
