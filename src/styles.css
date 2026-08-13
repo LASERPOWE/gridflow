@@ -321,3 +321,10 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:0 0 0 3px rgba(4
 .admin-req:last-child{border-bottom:none}
 .admin-req-msg{color:var(--muted);font-style:italic;font-size:12px;margin-top:4px}
 .admin-req-actions{display:flex;gap:8px;flex-shrink:0}
+
+/* login tabs (User / Admin) */
+.auth-tabs{display:flex;gap:6px;background:#eef1f7;padding:4px;border-radius:12px;margin:18px 0 16px}
+.auth-tab{flex:1;padding:9px;border:none;background:none;border-radius:9px;cursor:pointer;font-weight:600;font-size:13.5px;color:var(--muted);transition:all .18s var(--ease)}
+.auth-tab.on{background:#fff;color:var(--ss-blue);box-shadow:0 2px 8px rgba(16,30,60,.10)}
+.auth-pane{display:flex;flex-direction:column}
+.auth-hint{color:var(--muted);font-size:12.5px;margin:0 0 14px;text-align:center}
