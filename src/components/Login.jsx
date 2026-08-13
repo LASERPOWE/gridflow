@@ -3,7 +3,12 @@ import { useAuth } from '../lib/auth.jsx'
 import { isConfigured } from '../lib/supabase'
 
 function Logo() {
-  return <div className="logo"><span className="sq"><i/><i/><i/><i/></span> GridFlow</div>
+  return (
+    <div className="logo" style={{ fontFamily: 'Manrope,sans-serif' }}>
+      <span className="sq"><i/><i/><i/><i/></span> smartsheet
+      <span style={{ fontWeight: 500, fontSize: 12, color: '#69707d', letterSpacing: 1, marginLeft: 4 }}>by Laser Power</span>
+    </div>
+  )
 }
 
 export default function Login() {
