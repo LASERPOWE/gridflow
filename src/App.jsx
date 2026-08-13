@@ -10,6 +10,26 @@ import Notifications from './components/Notifications.jsx'
 import RequestAccess from './components/RequestAccess.jsx'
 import Loader from './components/Loader.jsx'
 import AdminPanel from './components/AdminPanel.jsx'
+import ProfileMenu from './components/ProfileMenu.jsx'
+import SearchModal from './components/SearchModal.jsx'
+import SimpleModal from './components/SimpleModal.jsx'
+
+// smartsheet logo mark (reused)
+function Mark({ size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24">
+      <rect x="1" y="1" width="22" height="22" rx="6" fill="#fff" />
+      <path d="M6 12.5l3.5 3.5L18 7.5" stroke="#2f5bd6" strokeWidth="2.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+// flatten all sheets from the tree
+function allSheets(tree) {
+  const out = []
+  tree.forEach(o => o.depts.forEach(d => d.wss.forEach(w => (w.sheets || []).forEach(s => out.push(s)))))
+  return out
+}
 
 // Fixed column colors (Smartsheet-style), matched by column key/label keywords.
 function colorClass(key, label) {
@@ -37,10 +57,15 @@ function Workspace() {
   const [showReq, setShowReq] = useState(false)
   const [busy, setBusy] = useState(true)      // loader overlay (app start + transitions)
   const [busyLabel, setBusyLabel] = useState('')
+  const [showProfile, setShowProfile] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [soon, setSoon] = useState('')        // coming-soon modal label
+  const [recents, setRecents] = useState([])  // recently opened sheets
   const gridRef = useRef()
 
   const initials = (profile?.full_name || profile?.email || 'U').trim().slice(0, 2).toUpperCase()
-  const focusSearch = () => document.getElementById('gf-search')?.focus()
+  const openSearch = () => setShowSearch(true)
 
   // Briefly show the loader (min duration so the animation reads as intentional).
   function flash(label, ms = 650) {
@@ -48,8 +73,11 @@ function Workspace() {
     window.clearTimeout(flash._t)
     flash._t = window.setTimeout(() => setBusy(false), ms)
   }
-  // Loader on view (rail) change.
+  // Views that don't have a real screen yet -> coming-soon modal.
+  const COMING_SOON = { resource: 'Resource Management', workapps: 'WorkApps', apps: 'Apps', help: 'Help' }
   function changeView(v) {
+    if (v === 'search') { openSearch(); return }
+    if (COMING_SOON[v]) { setSoon(COMING_SOON[v]); return }
     if (v === view) return
     flash(v.charAt(0).toUpperCase() + v.slice(1))
     setView(v)
@@ -81,6 +109,7 @@ function Workspace() {
     const { data: r, error } = await supabase.from('rows').select('*').eq('sheet_id', s.id).order('created_at').limit(5000)
     if (error) setErr(error.message)
     setRows(r || []); setLoading(false)
+    setRecents(prev => [s, ...prev.filter(x => x.id !== s.id)].slice(0, 8))
     if (switching) window.setTimeout(() => setBusy(false), 450)
   }
 
@@ -154,8 +183,9 @@ function Workspace() {
 
   return (
     <div className={'shell' + (view === 'admin' ? ' admin-mode' : '')}>
-      <IconRail view={view} onView={changeView} onCreate={newSheet} onSearch={focusSearch}
-        onNotif={() => setShowNotif(v => !v)} notifCount={notifCount} initials={initials} isAdmin={isAdmin} />
+      <IconRail view={view} onView={changeView} onCreate={newSheet} onSearch={openSearch}
+        onNotif={() => setShowNotif(v => !v)} notifCount={notifCount} initials={initials} isAdmin={isAdmin}
+        onProfile={() => setShowProfile(v => !v)} />
 
       {view === 'admin' ? (
         <AdminPanel />
@@ -199,11 +229,15 @@ function Workspace() {
           <button className="mi">Connections</button>
           <button className="mi">Dynamic View</button>
           <span className="doc">
-            <svg width="16" height="16" viewBox="0 0 24 24"><rect x="1" y="1" width="22" height="22" rx="5" fill="#fff"/><path d="M6 12.5l3.5 3.5L18 7.5" stroke="#2f5bd6" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <Mark size={16} />
             {sheet ? sheet.name : 'smartsheet'}
           </span>
-          <span className="who">{profile?.full_name || profile?.email}</span>
-          <button className="out" onClick={signOut}>Sign out</button>
+          <button className="topmenu-search" onClick={openSearch} title="Search (sheets)">🔍 Search…</button>
+          <div className="topmenu-avatar-wrap">
+            <button className="topmenu-avatar" onClick={() => setShowProfile(v => !v)} title={profile?.full_name || profile?.email}>{initials}</button>
+            <ProfileMenu open={showProfile} onClose={() => setShowProfile(false)} isAdmin={isAdmin}
+              onAdmin={() => setView('admin')} onSettings={() => setShowSettings(true)} onComingSoon={setSoon} />
+          </div>
         </div>
 
         {/* grid toolbar */}
@@ -246,6 +280,30 @@ function Workspace() {
       {showReq && <RequestAccess sheet={sheet} onClose={() => setShowReq(false)} />}
 
       <Notifications open={showNotif} onClose={() => setShowNotif(false)} isApprover={isApprover} onCount={setNotifCount} />
+
+      <SearchModal open={showSearch} onClose={() => setShowSearch(false)}
+        sheets={allSheets(tree)} recents={recents} onPick={(s) => { if (view === 'admin') setView('browse'); selectSheet(s) }} />
+
+      {soon && (
+        <SimpleModal title={soon} onClose={() => setSoon('')}>
+          <p style={{ fontSize: 13.5, color: '#3a3f4b', lineHeight: 1.6 }}>
+            <b>{soon}</b> is coming soon. This section is planned for a future update.
+          </p>
+        </SimpleModal>
+      )}
+
+      {showSettings && (
+        <SimpleModal title="Personal Settings" onClose={() => setShowSettings(false)}>
+          <div style={{ fontSize: 13.5, color: '#3a3f4b', lineHeight: 1.8 }}>
+            <div><b>Name:</b> {profile?.full_name || '—'}</div>
+            <div><b>Email:</b> {profile?.email}</div>
+            <div><b>Role:</b> {role.replace(/_/g, ' ')}</div>
+            <p style={{ marginTop: 12, color: '#69707d', fontSize: 12.5 }}>
+              More settings (password, theme, notifications) coming soon.
+            </p>
+          </div>
+        </SimpleModal>
+      )}
 
       <Loader show={busy} label={busyLabel} />
     </div>
