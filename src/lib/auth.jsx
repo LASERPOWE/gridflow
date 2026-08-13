@@ -3,8 +3,8 @@ import { supabase } from './supabase'
 
 const Ctx = createContext(null)
 export const useAuth = () => useContext(Ctx)
-const WRITE = ['super_admin', 'org_admin', 'dept_admin', 'manager', 'editor']
-const ADMIN_ROLES = ['super_admin', 'org_admin', 'dept_admin', 'manager']
+// Only two roles now: super_admin (full access) and user (granted access only).
+const SUPER = 'super_admin'
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
@@ -32,10 +32,10 @@ export function AuthProvider({ children }) {
     if (!email) return true
     const provider = s?.user?.app_metadata?.provider || 'email'
 
-    // Admin tab (email/password) stays admins-only.
+    // Admin tab (email/password) is for the super admin only.
     if (provider === 'email') {
       const { data: p, error } = await supabase.from('profiles').select('global_role').eq('id', s.user.id).maybeSingle()
-      if (!error && p && !ADMIN_ROLES.includes(p.global_role)) {
+      if (!error && p && p.global_role !== SUPER) {
         return denyAndOut('NOT_ADMIN')
       }
     }
@@ -66,13 +66,15 @@ export function AuthProvider({ children }) {
     return () => sub.subscription.unsubscribe()
   }, [])
 
-  const role = profile?.global_role || 'viewer'
+  const role = profile?.global_role || 'user'
+  const isSuper = role === SUPER
   const value = {
     session, user: session?.user || null, profile, role, loading,
     denied, clearDenied: () => setDenied(''),
-    canWrite: WRITE.includes(role),
-    isAdmin: ['super_admin', 'org_admin'].includes(role),
-    isApprover: ['super_admin', 'org_admin', 'dept_admin', 'manager'].includes(role),
+    isSuper,
+    canWrite: isSuper,        // only super admin can edit/create
+    isAdmin: isSuper,         // admin panel = super admin only
+    isApprover: isSuper,
     signIn: (e, p) => supabase.auth.signInWithPassword({ email: e, password: p }),
     signUp: (e, p, n) => supabase.auth.signUp({ email: e, password: p, options: { data: { full_name: n } } }),
     signInWithGoogle: () => supabase.auth.signInWithOAuth({
