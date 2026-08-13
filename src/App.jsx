@@ -9,6 +9,7 @@ import IconRail from './components/IconRail.jsx'
 import Notifications from './components/Notifications.jsx'
 import RequestAccess from './components/RequestAccess.jsx'
 import Loader from './components/Loader.jsx'
+import AdminPanel from './components/AdminPanel.jsx'
 
 // Fixed column colors (Smartsheet-style), matched by column key/label keywords.
 function colorClass(key, label) {
@@ -20,7 +21,7 @@ function colorClass(key, label) {
 }
 
 function Workspace() {
-  const { profile, role, signOut, canWrite, isApprover } = useAuth()
+  const { profile, role, signOut, canWrite, isApprover, isApprover: isAdmin } = useAuth()
   const [tree, setTree] = useState([])
   const [firstWsId, setFirstWsId] = useState(null)
   const [sheet, setSheet] = useState(null)
@@ -152,10 +153,14 @@ function Workspace() {
   const setQuickFilter = (v) => { setQuick(v); gridRef.current?.api.setGridOption('quickFilterText', v) }
 
   return (
-    <div className="shell">
+    <div className={'shell' + (view === 'admin' ? ' admin-mode' : '')}>
       <IconRail view={view} onView={changeView} onCreate={newSheet} onSearch={focusSearch}
-        onNotif={() => setShowNotif(v => !v)} notifCount={notifCount} initials={initials} />
+        onNotif={() => setShowNotif(v => !v)} notifCount={notifCount} initials={initials} isAdmin={isAdmin} />
 
+      {view === 'admin' ? (
+        <AdminPanel />
+      ) : (
+      <>
       {/* tree */}
       <div className="tree">
         <div className="head"><span>Sheets</span><button title="New sheet" onClick={newSheet}>+</button></div>
@@ -231,6 +236,8 @@ function Workspace() {
           )}
         </div>
       </div>
+      </>
+      )}
 
       {showImport && (
         <ImportModal workspaceId={firstWsId} onClose={() => setShowImport(false)} onDone={(s) => { setShowImport(false); loadTree(s.id) }} />
