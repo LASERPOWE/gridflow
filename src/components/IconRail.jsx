@@ -8,7 +8,7 @@ function Item({ icon, label, active, badge, onClick }) {
   )
 }
 
-export default function IconRail({ view, onView, onCreate, onSearch, onNotif, notifCount, initials, isAdmin, onProfile }) {
+export default function IconRail({ view, onView, onCreate, onSearch, onNotif, notifCount, initials, isAdmin, canWrite, onProfile }) {
   return (
     <nav className="rail">
       <div className="rail-top">
@@ -23,7 +23,7 @@ export default function IconRail({ view, onView, onCreate, onSearch, onNotif, no
         <Item icon="⭐" label="Favorites" active={view === 'favorites'} onClick={() => onView('favorites')} />
         <Item icon="🧩" label="Resource Management" onClick={() => onView('resource')} />
         <Item icon="🧱" label="WorkApps" onClick={() => onView('workapps')} />
-        <Item icon="➕" label="Create" onClick={onCreate} />
+        {canWrite && <Item icon="➕" label="Create" onClick={onCreate} />}
         {isAdmin && <Item icon="🛡" label="Admin" active={view === 'admin'} onClick={() => onView('admin')} />}
       </div>
       <div className="rail-bottom">
