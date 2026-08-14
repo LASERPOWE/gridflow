@@ -73,6 +73,7 @@ function Workspace() {
   const [confirmDel, setConfirmDel] = useState(null)  // sheet pending delete
   const [recents, setRecents] = useState([])  // recently opened sheets
   const [frozen, setFrozen] = useState(false) // freeze first data column
+  const [fx, setFx] = useState({ label: '', value: '', rowId: null, key: null }) // formula bar
   const gridRef = useRef()
 
   // Live refs so formulas always read the latest cell values.
@@ -192,7 +193,34 @@ function Workspace() {
     if (error) setErr(error.message)
     // recompute any formulas that depend on the changed cell
     e.api.refreshCells({ force: true })
+    // keep the formula bar in sync with the edited cell
+    const field = e.colDef.field
+    if (field && field.startsWith('data.')) {
+      const key = field.slice(5)
+      setFx(f => (f.rowId === e.data.id && f.key === key) ? { ...f, value: e.data.data?.[key] == null ? '' : String(e.data.data[key]) } : f)
+    }
   }, [])
+
+  // Formula bar: reflect the clicked cell; edits commit to that cell.
+  const onCellClicked = useCallback((e) => {
+    const field = e.colDef.field
+    if (!field || !field.startsWith('data.')) { setFx({ label: '', value: '', rowId: null, key: null }); return }
+    const key = field.slice(5)
+    const raw = e.data?.data?.[key]
+    const colIdx = colsRef.current.findIndex(c => c.key === key)
+    const label = (colIdx >= 0 ? colLetter(colIdx) : '?') + (e.rowIndex + 1)
+    setFx({ label, value: raw == null ? '' : String(raw), rowId: e.data.id, key })
+  }, [])
+
+  async function commitFx() {
+    if (!fx.rowId || !fx.key) return
+    const row = rowsRef.current.find(r => r.id === fx.rowId); if (!row) return
+    if (!row.data) row.data = {}
+    row.data[fx.key] = fx.value
+    const { error } = await supabase.from('rows').update({ data: row.data }).eq('id', fx.rowId)
+    if (error) return setErr(error.message)
+    gridRef.current?.api.refreshCells({ force: true })
+  }
 
   async function addRow() {
     if (!sheet) return
@@ -401,12 +429,25 @@ function Workspace() {
           <span className="count">{rows.length} rows</span>
         </div>
 
+        {/* formula bar (Excel-style) */}
+        {sheet && (
+          <div className="fxbar">
+            <span className="fxcell">{fx.label || '—'}</span>
+            <span className="fxsym">ƒx</span>
+            <input className="fxinput" value={fx.value} disabled={!canWrite || !fx.rowId}
+              placeholder={fx.rowId ? 'Type a value or =formula (e.g. =SUM(A1:A5))' : 'Click a cell to edit…'}
+              onChange={e => setFx(f => ({ ...f, value: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitFx() } }} />
+          </div>
+        )}
+
         {err && <div className="err" style={{ padding: '6px 12px' }}>{err}</div>}
 
         <div className="grid-wrap ag-theme-quartz" onPaste={handlePaste}>
           {sheet ? (
             <AgGridReact ref={gridRef} rowData={rows} columnDefs={colDefs} defaultColDef={defaultColDef}
-              onCellValueChanged={onCellValueChanged} animateRows enableCellTextSelection stopEditingWhenCellsLoseFocus />
+              onCellValueChanged={onCellValueChanged} onCellClicked={onCellClicked}
+              animateRows enableCellTextSelection stopEditingWhenCellsLoseFocus />
           ) : (
             <div className="empty">{loading ? 'Loading…' : 'Select a sheet on the left, or Import from Smartsheet.'}</div>
           )}

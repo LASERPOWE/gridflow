@@ -96,6 +96,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--ss-blue);border-
 .toolbar .search{width:210px;padding:5px 9px}
 .count{color:var(--muted);font-size:12px}
 
+.fxbar{display:flex;align-items:center;gap:8px;padding:5px 12px;border-bottom:1px solid var(--border);background:#fbfcfe;flex-shrink:0}
+.fxbar .fxcell{min-width:52px;text-align:center;font-weight:700;font-size:12.5px;color:#3a3f4b;background:#eef2f9;border:1px solid var(--border);border-radius:5px;padding:3px 6px}
+.fxbar .fxsym{font-style:italic;font-weight:700;color:#8a91a0;font-size:13px}
+.fxbar .fxinput{flex:1;border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace;background:#fff;color:var(--text)}
+.fxbar .fxinput:focus{outline:none;border-color:var(--ss-blue);box-shadow:0 0 0 3px rgba(47,91,214,.15)}
+.fxbar .fxinput:disabled{background:#f4f6fa;color:#9aa1af}
 .grid-wrap{flex:1;overflow:hidden}
 .ag-theme-quartz{
   --ag-border-radius:0; --ag-header-background-color:#eef1f5; --ag-header-height:38px;
