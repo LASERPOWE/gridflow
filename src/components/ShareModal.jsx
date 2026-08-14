@@ -25,36 +25,35 @@ export default function ShareModal({ sheet, onClose }) {
   }, [sheet.id])
   useEffect(() => { load() }, [load])
 
-  function notify(toEmail) {
-    const link = window.location.origin
-    const subj = `You've been given access to "${sheet.name}"`
-    const body =
-      `Hi,\n\nYou now have access to the sheet "${sheet.name}" on smartsheet by Laser Power.\n\n` +
-      `Open it here: ${link}\nSign in with this email (${toEmail}) to view it.\n\n` +
-      `— ${profile?.full_name || profile?.email || 'Admin'}`
-    const a = document.createElement('a')
-    a.href = `mailto:${toEmail}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`
-    document.body.appendChild(a); a.click(); a.remove()
+  // Send the person a real email straight from Supabase's built-in mail service
+  // (a secure sign-in link). Clicking it signs them in and they land on the app
+  // with this sheet already shared. No mail app / Outlook opens.
+  async function sendEmail(toEmail) {
+    const { error } = await supabase.auth.signInWithOtp({
+      email: toEmail,
+      options: { shouldCreateUser: true, emailRedirectTo: window.location.origin },
+    })
+    return !error ? true : (error.message || 'send failed')
   }
 
   async function share(e) {
     e.preventDefault()
     const em = email.trim().toLowerCase()
     if (!em) return
-    setBusy(true); setMsg('')
+    setBusy(true); setMsg('Sharing…')
     const { data: p } = await supabase.from('profiles').select('id,email').ilike('email', em).maybeSingle()
     if (p) {
       if (!access.some(a => a.user_id === p.id)) {
         const { error } = await supabase.from('sheet_access').insert({ user_id: p.id, sheet_id: sheet.id, granted_by: profile?.id })
         if (error) { setBusy(false); return setMsg('Error: ' + error.message) }
       }
-      setMsg(`✓ Access granted to ${em}. Opening an email to notify them…`)
     } else {
       const { error } = await supabase.from('pending_shares').insert({ email: em, sheet_id: sheet.id })
       if (error) { setBusy(false); return setMsg('Error: ' + error.message) }
-      setMsg(`✓ Invited ${em}. They'll get access automatically when they sign in. Opening an email…`)
     }
-    notify(em)
+    const sent = await sendEmail(em)
+    if (sent === true) setMsg(`✓ Shared with ${em} — a sign-in email has been sent to them.`)
+    else setMsg(`✓ Access granted to ${em}, but the email couldn't send (${sent}). They can still sign in with this email to see it.`)
     setEmail(''); setBusy(false); load()
   }
 
@@ -84,7 +83,7 @@ export default function ShareModal({ sheet, onClose }) {
           <button className="share-x" onClick={() => removePending(p.id)} disabled={busy}>Cancel</button>
         </div>
       ))}
-      <p className="share-note">The person gets access when they sign in with this email. A notification email opens in your mail app — just press send.</p>
+      <p className="share-note">A sign-in email is sent straight to the person from the app. When they open the link they sign in and land on this shared sheet — no Outlook or mail app needed.</p>
     </SimpleModal>
   )
 }
