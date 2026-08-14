@@ -128,7 +128,10 @@ function Workspace() {
     setSheet(s); setLoading(true); setErr('')
     const { data: c } = await supabase.from('sheet_columns').select('*').eq('sheet_id', s.id).order('position')
     setCols(c || [])
-    const { data: r, error } = await supabase.from('rows').select('*').eq('sheet_id', s.id).order('created_at').limit(5000)
+    // Stable row order: created_at, then id as tie-breaker so rows never "jump"
+    // between reloads (blank sheets insert many rows with the same created_at).
+    const { data: r, error } = await supabase.from('rows').select('*').eq('sheet_id', s.id)
+      .order('created_at', { ascending: true }).order('id', { ascending: true }).limit(5000)
     if (error) setErr(error.message)
     setRows(r || []); setLoading(false)
     setRecents(prev => [s, ...prev.filter(x => x.id !== s.id)].slice(0, 8))
@@ -240,7 +243,8 @@ function Workspace() {
     for (let i = 0; i < 10; i++) colRows.push({ sheet_id: data.id, key: 'col_' + colLetter(i).toLowerCase(), label: colLetter(i), type: 'text', position: i + 1 })
     await supabase.from('sheet_columns').insert(colRows)
     const blankRows = []
-    for (let i = 0; i < 20; i++) blankRows.push({ sheet_id: data.id, data: {}, source_system: 'manual' })
+    const base = Date.now()
+    for (let i = 0; i < 20; i++) blankRows.push({ sheet_id: data.id, data: {}, source_system: 'manual', created_at: new Date(base + i * 1000).toISOString() })
     await supabase.from('rows').insert(blankRows)
     loadTree(data.id)
   }
@@ -447,6 +451,7 @@ function Workspace() {
           {sheet ? (
             <AgGridReact ref={gridRef} rowData={rows} columnDefs={colDefs} defaultColDef={defaultColDef}
               onCellValueChanged={onCellValueChanged} onCellClicked={onCellClicked}
+              enterNavigatesVertically enterNavigatesVerticallyAfterEdit
               animateRows enableCellTextSelection stopEditingWhenCellsLoseFocus />
           ) : (
             <div className="empty">{loading ? 'Loading…' : 'Select a sheet on the left, or Import from Smartsheet.'}</div>
