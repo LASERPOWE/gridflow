@@ -31,7 +31,7 @@ export default function ShareModal({ sheet, onClose }) {
   async function sendEmail(toEmail) {
     const { error } = await supabase.auth.signInWithOtp({
       email: toEmail,
-      options: { shouldCreateUser: true, emailRedirectTo: window.location.origin },
+      options: { shouldCreateUser: true, emailRedirectTo: window.location.origin, data: { sheet: sheet.name } },
     })
     return !error ? true : (error.message || 'send failed')
   }
