@@ -92,6 +92,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--ss-blue);border-
 .tbtn.primary:hover{background:var(--ss-blue-dark)}
 .tbtn.icon{font-weight:700;min-width:30px;justify-content:center}
 .tbtn.on{background:var(--ss-blue);color:#fff;border-color:var(--ss-blue)}
+.tb-drop{position:relative;display:inline-flex}
+.tb-menu{position:absolute;top:calc(100% + 4px);left:0;z-index:60;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(16,30,60,.16);padding:5px;min-width:150px;display:flex;flex-direction:column}
+.tb-menu button{text-align:left;background:none;border:none;padding:8px 12px;border-radius:6px;font-size:13px;color:var(--text);cursor:pointer}
+.tb-menu button:hover{background:#eef3ff}
+.fr-in{border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:14px;color:var(--text);background:#fff}
+.fr-in:focus{outline:none;border-color:var(--ss-blue);box-shadow:0 0 0 3px rgba(47,91,214,.15)}
 .toolbar .spacer{flex:1}
 .toolbar .search{width:210px;padding:5px 9px}
 .count{color:var(--muted);font-size:12px}

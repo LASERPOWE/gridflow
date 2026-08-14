@@ -14,6 +14,7 @@ import AdminPanel from './components/AdminPanel.jsx'
 import ProfileMenu from './components/ProfileMenu.jsx'
 import SearchModal from './components/SearchModal.jsx'
 import SimpleModal from './components/SimpleModal.jsx'
+import FindReplace from './components/FindReplace.jsx'
 
 // smartsheet logo mark (reused)
 function Mark({ size = 20 }) {
@@ -49,6 +50,13 @@ function colorClass(key, label) {
   return ''
 }
 
+// Cell-type display formatters (Excel-like).
+function fmtNumber(n) { const x = parseFloat(n); return isNaN(x) ? n : x.toLocaleString('en-IN') }
+function fmtCurrency(n) { const x = parseFloat(n); return isNaN(x) ? n : '₹' + x.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+function fmtPercent(n) { const x = parseFloat(n); return isNaN(x) ? n : x + '%' }
+function fmtDate(v) { if (v === '' || v == null) return v; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }
+const isChecked = (v) => v === true || v === 'true' || v === 1 || v === '1' || v === 'TRUE'
+
 function Workspace() {
   const { profile, role, signOut, canWrite, isApprover, isApprover: isAdmin } = useAuth()
   const [tree, setTree] = useState([])
@@ -74,10 +82,15 @@ function Workspace() {
   const [recents, setRecents] = useState([])  // recently opened sheets
   const [frozen, setFrozen] = useState(false) // freeze first data column
   const [fx, setFx] = useState({ label: '', value: '', rowId: null, key: null }) // formula bar
+  const [menu, setMenu] = useState(null)      // toolbar dropdown: 'insert' | 'delete' | 'format' | null
+  const [showFR, setShowFR] = useState(false) // find & replace
+  const [selectDlg, setSelectDlg] = useState(null) // dropdown-options dialog for a column
   const gridRef = useRef()
   const fxInputRef = useRef(null)     // formula bar <input>
   const fxArmedRef = useRef(false)    // true while building a formula (click cells to insert refs)
   const fxCursorRef = useRef(0)       // last caret position in the formula bar
+  const undoRef = useRef([])          // stack of {rowId, colId, old}
+  const undoingRef = useRef(false)
 
   // Live refs so formulas always read the latest cell values.
   const rowsRef = useRef(rows); rowsRef.current = rows
@@ -159,17 +172,29 @@ function Workspace() {
         headerName: c.label, field: 'data.' + c.key,
         valueGetter: p => p.data?.data?.[c.key],
         valueSetter: p => { if (!p.data.data) p.data.data = {}; p.data.data[c.key] = p.newValue; return true },
-        editable: canWrite, minWidth: 110, flex: 1, cellClass: cc,
+        editable: canWrite && c.type !== 'checkbox', minWidth: 110, flex: 1, cellClass: cc,
         pinned: (frozen && idx === 0) ? 'left' : undefined,
-        cellRenderer: (c.type === 'status' || c.type === 'priority') ? PillRenderer : undefined,
-        // Formula cells display the computed result; currency stays formatted.
+        cellRenderer:
+          c.type === 'checkbox'
+            ? (p) => {
+                const on = isChecked(p.value)
+                return <input type="checkbox" checked={on} disabled={!canWrite}
+                  onChange={() => p.node.setDataValue('data.' + c.key, !on)} />
+              }
+            : (c.type === 'status' || c.type === 'priority') ? PillRenderer : undefined,
+        // Formula cells show the computed result; typed columns get Excel-style formatting.
         valueFormatter: p => {
           const raw = p.value
           if (isFormula(raw)) return String(evalFormula(raw, resolveCell))
-          if (c.type === 'currency') return inr(p)
+          if (raw === '' || raw == null) return raw
+          if (c.type === 'currency') return fmtCurrency(raw)
+          if (c.type === 'number') return fmtNumber(raw)
+          if (c.type === 'percent') return fmtPercent(raw)
+          if (c.type === 'date') return fmtDate(raw)
           return raw
         },
-        cellEditor: (c.type === 'select' || c.type === 'status' || c.type === 'priority') ? 'agSelectCellEditor' : undefined,
+        cellEditor: (c.type === 'select' || c.type === 'status' || c.type === 'priority') ? 'agSelectCellEditor'
+          : c.type === 'date' ? 'agDateStringCellEditor' : undefined,
         cellEditorParams: c.options ? { values: c.options } : undefined,
         // per-cell Excel formatting stored in row.data._fmt[key]
         cellStyle: p => {
@@ -192,6 +217,11 @@ function Workspace() {
   const defaultColDef = useMemo(() => ({ sortable: true, resizable: true, filter: true, minWidth: 110 }), [])
 
   const onCellValueChanged = useCallback(async (e) => {
+    // record for undo (skip while an undo is being applied)
+    if (!undoingRef.current && e.colDef.field) {
+      undoRef.current.push({ rowId: e.data.id, colId: e.colDef.field, old: e.oldValue })
+      if (undoRef.current.length > 100) undoRef.current.shift()
+    }
     const patch = e.colDef.field === 'status' ? { status: e.newValue }
       : e.colDef.field === 'priority' ? { priority: e.newValue }
       : { data: e.data.data }
@@ -247,6 +277,145 @@ function Workspace() {
     if (error) return setErr(error.message)
     gridRef.current?.api.refreshCells({ force: true })
   }
+
+  // ---- focused-cell helpers ----
+  const gApi = () => gridRef.current?.api
+  const focusedCell = () => gApi()?.getFocusedCell()
+  function focusedColKey() { const c = focusedCell(); if (!c) return null; const id = c.column.getColId(); return id.startsWith('data.') ? id.slice(5) : null }
+
+  // ---- insert / delete rows ----
+  async function insertRow(where) {
+    if (!sheet) { setMenu(null); return }
+    const cell = focusedCell()
+    const idx = cell ? cell.rowIndex : rows.length - 1
+    const t = (r) => r ? new Date(r.created_at).getTime() : null
+    const cur = rows[idx]
+    let ts
+    if (where === 'above') { const prev = rows[idx - 1]; const a = t(prev), b = t(cur) || Date.now(); ts = a ? (a + b) / 2 : (b - 1000) }
+    else { const next = rows[idx + 1]; const a = t(cur) || Date.now(), b = t(next); ts = b ? (a + b) / 2 : (a + 1000) }
+    const { error } = await supabase.from('rows').insert({ sheet_id: sheet.id, data: {}, source_system: 'manual', created_at: new Date(ts).toISOString() })
+    setMenu(null)
+    if (error) return setErr(error.message)
+    selectSheet(sheet)
+  }
+  async function deleteFocusedRow() {
+    setMenu(null)
+    const cell = focusedCell(); if (!cell) return setErr('Click a cell in the row to delete.')
+    const node = gApi().getDisplayedRowAtIndex(cell.rowIndex); if (!node?.data) return
+    await supabase.from('rows').delete().eq('id', node.data.id)
+    setRows(rs => rs.filter(r => r.id !== node.data.id))
+  }
+
+  // ---- insert / delete columns ----
+  async function relabelGrid() {
+    if (sheet?.kind === 'work_orders') return
+    const { data: c } = await supabase.from('sheet_columns').select('*').eq('sheet_id', sheet.id).order('position')
+    const list = c || []
+    for (let i = 0; i < list.length; i++) { const want = colLetter(i); if (list[i].label !== want) await supabase.from('sheet_columns').update({ label: want }).eq('id', list[i].id) }
+  }
+  async function insertCol(side) {
+    setMenu(null)
+    if (!sheet) return
+    const colKey = focusedColKey()
+    const tgt = cols.find(x => x.key === colKey)
+    const base = tgt ? tgt.position : cols.length
+    const pos = side === 'left' ? base : base + 1
+    for (const col of cols) { if (col.position >= pos) await supabase.from('sheet_columns').update({ position: col.position + 1 }).eq('id', col.id) }
+    const key = 'col_' + Date.now().toString(36)
+    const { error } = await supabase.from('sheet_columns').insert({ sheet_id: sheet.id, key, label: 'New', type: 'text', position: pos })
+    if (error) return setErr(error.message)
+    await relabelGrid()
+    selectSheet(sheet)
+  }
+  async function deleteFocusedColumn() {
+    setMenu(null)
+    const colKey = focusedColKey(); if (!colKey) return setErr('Click a cell in the column to delete.')
+    const tgt = cols.find(x => x.key === colKey); if (!tgt) return
+    if (cols.length <= 1) return setErr('A sheet needs at least one column.')
+    await supabase.from('sheet_columns').delete().eq('id', tgt.id)
+    for (const col of cols) { if (col.position > tgt.position) await supabase.from('sheet_columns').update({ position: col.position - 1 }).eq('id', col.id) }
+    await relabelGrid()
+    selectSheet(sheet)
+  }
+
+  // ---- column type / format ----
+  async function setColumnType(type) {
+    setMenu(null)
+    const colKey = focusedColKey(); if (!colKey) return setErr('Click a cell in the column first, then choose a type.')
+    const tgt = cols.find(x => x.key === colKey); if (!tgt) return
+    if (type === 'select') { setSelectDlg({ id: tgt.id, key: colKey, value: (tgt.options || []).join(', ') }); return }
+    const { error } = await supabase.from('sheet_columns').update({ type }).eq('id', tgt.id)
+    if (error) return setErr(error.message)
+    selectSheet(sheet)
+  }
+  async function saveSelectOptions() {
+    const opts = selectDlg.value.split(',').map(s => s.trim()).filter(Boolean)
+    await supabase.from('sheet_columns').update({ type: 'select', options: opts }).eq('id', selectDlg.id)
+    setSelectDlg(null)
+    selectSheet(sheet)
+  }
+
+  // ---- find & replace ----
+  async function replaceAll(find, repl, matchCase) {
+    if (!find) return 0
+    let count = 0
+    const updates = []
+    const flags = matchCase ? 'g' : 'gi'
+    const esc = find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const re = new RegExp(esc, flags)
+    rows.forEach(r => {
+      let changed = false
+      cols.forEach(c => {
+        const v = r.data?.[c.key]
+        if (v == null || typeof v !== 'string' && typeof v !== 'number') return
+        const s = String(v)
+        if (re.test(s)) { r.data[c.key] = s.replace(re, repl); changed = true; count++; re.lastIndex = 0 }
+      })
+      if (changed) updates.push(r)
+    })
+    for (const r of updates) await supabase.from('rows').update({ data: r.data }).eq('id', r.id)
+    gApi()?.refreshCells({ force: true })
+    return count
+  }
+  function findNext(find, matchCase) {
+    if (!find) return false
+    const api = gApi(); if (!api) return false
+    const f = matchCase ? find : find.toLowerCase()
+    const cur = api.getFocusedCell()
+    const startRow = cur ? cur.rowIndex : -1
+    for (let i = 1; i <= rows.length; i++) {
+      const ri = (startRow + i) % rows.length
+      const r = rows[ri]
+      for (const c of cols) {
+        let v = r.data?.[c.key]; if (v == null) continue
+        v = String(v); if (!matchCase) v = v.toLowerCase()
+        if (v.includes(f)) { api.ensureIndexVisible(ri); api.setFocusedCell(ri, 'data.' + c.key); return true }
+      }
+    }
+    return false
+  }
+
+  // ---- undo ----
+  function doUndo() {
+    const u = undoRef.current.pop(); if (!u) return
+    const api = gApi(); if (!api) return
+    let node = null
+    api.forEachNode(n => { if (n.data?.id === u.rowId) node = n })
+    if (!node) return
+    undoingRef.current = true
+    node.setDataValue(u.colId, u.old)
+    setTimeout(() => { undoingRef.current = false }, 0)
+  }
+
+  // keyboard: Ctrl/Cmd+Z = undo, Ctrl/Cmd+H = find & replace
+  useEffect(() => {
+    const h = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); doUndo() }
+      else if ((e.ctrlKey || e.metaKey) && (e.key === 'h' || e.key === 'H')) { e.preventDefault(); setShowFR(true) }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, []) // eslint-disable-line
 
   async function addRow() {
     if (!sheet) return
@@ -447,7 +616,47 @@ function Workspace() {
           <button className="tbtn icon" title="Align right" onClick={() => applyFormat('align', 'right')}>➡</button>
           <button className="tbtn icon" title="Toggle border" onClick={() => applyFormat('bd')}>▢</button>
           <span className="sep" />
-          <button className={'tbtn icon' + (frozen ? ' on' : '')} title="Freeze first column" onClick={() => setFrozen(f => !f)}>❄</button></>}
+          <button className={'tbtn icon' + (frozen ? ' on' : '')} title="Freeze first column" onClick={() => setFrozen(f => !f)}>❄</button>
+          <span className="sep" />
+          {/* Insert menu */}
+          <div className="tb-drop">
+            <button className="tbtn" onClick={() => setMenu(m => m === 'insert' ? null : 'insert')}>➕ Insert ▾</button>
+            {menu === 'insert' && (
+              <div className="tb-menu">
+                <button onClick={() => insertRow('above')}>Row above</button>
+                <button onClick={() => insertRow('below')}>Row below</button>
+                <button onClick={() => insertCol('left')}>Column left</button>
+                <button onClick={() => insertCol('right')}>Column right</button>
+              </div>
+            )}
+          </div>
+          {/* Delete menu */}
+          <div className="tb-drop">
+            <button className="tbtn" onClick={() => setMenu(m => m === 'delete' ? null : 'delete')}>🗑 Delete ▾</button>
+            {menu === 'delete' && (
+              <div className="tb-menu">
+                <button onClick={deleteFocusedRow}>Delete row</button>
+                <button onClick={deleteFocusedColumn}>Delete column</button>
+              </div>
+            )}
+          </div>
+          {/* Format / cell type menu */}
+          <div className="tb-drop">
+            <button className="tbtn" onClick={() => setMenu(m => m === 'format' ? null : 'format')}>🔠 Type ▾</button>
+            {menu === 'format' && (
+              <div className="tb-menu">
+                <button onClick={() => setColumnType('text')}>Text</button>
+                <button onClick={() => setColumnType('number')}>Number (1,234)</button>
+                <button onClick={() => setColumnType('currency')}>Currency (₹)</button>
+                <button onClick={() => setColumnType('percent')}>Percent (%)</button>
+                <button onClick={() => setColumnType('date')}>Date</button>
+                <button onClick={() => setColumnType('checkbox')}>Checkbox ☑</button>
+                <button onClick={() => setColumnType('select')}>Dropdown…</button>
+              </div>
+            )}
+          </div>
+          <button className="tbtn" title="Find & Replace (Ctrl+H)" onClick={() => setShowFR(true)}>🔎 Find/Replace</button>
+          <button className="tbtn icon" title="Undo (Ctrl+Z)" onClick={doUndo}>↶</button></>}
           <span className="sep" />
           <button className="tbtn" onClick={() => setShowImport(true)}>⬇ Import from Smartsheet</button>
           {sheet && !canWrite && <button className="tbtn" onClick={() => setShowReq(true)}>🔒 Request access</button>}
@@ -498,6 +707,25 @@ function Workspace() {
       )}
 
       {showReq && <RequestAccess sheet={sheet} onClose={() => setShowReq(false)} />}
+
+      {showFR && (
+        <FindReplace cols={cols} rows={rows} onClose={() => setShowFR(false)}
+          onReplaceAll={replaceAll} onFindNext={findNext} />
+      )}
+
+      {selectDlg && (
+        <SimpleModal title="Dropdown options" onClose={() => setSelectDlg(null)}>
+          <p style={{ fontSize: 13, color: '#3a3f4b', marginBottom: 10 }}>Comma-separated list of choices for this column:</p>
+          <input className="fr-in" style={{ width: '100%' }} autoFocus value={selectDlg.value}
+            placeholder="e.g. Open, In Progress, Done"
+            onChange={e => setSelectDlg(d => ({ ...d, value: e.target.value }))}
+            onKeyDown={e => { if (e.key === 'Enter') saveSelectOptions() }} />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+            <button className="btn ghost" onClick={() => setSelectDlg(null)}>Cancel</button>
+            <button className="btn" onClick={saveSelectOptions}>Save</button>
+          </div>
+        </SimpleModal>
+      )}
 
       <Notifications open={showNotif} onClose={() => setShowNotif(false)} isApprover={isApprover} onCount={setNotifCount} />
 
