@@ -471,7 +471,8 @@ function Workspace() {
               onKeyDown={e => {
                 if (e.key === 'Enter') { e.preventDefault(); commitFx() }
                 else if (e.key === 'Escape') { fxArmedRef.current = false; e.target.blur() }
-              }} />
+              }}
+              onBlur={() => { if (fxArmedRef.current) setTimeout(() => { if (fxArmedRef.current) fxInputRef.current?.focus() }, 0) }} />
             {(fx.value || '').trim().startsWith('=') && <span className="fxhint">click cells to add refs · Enter to apply</span>}
           </div>
         )}
