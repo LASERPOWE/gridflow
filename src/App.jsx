@@ -91,6 +91,7 @@ function Workspace() {
   const fxCursorRef = useRef(0)       // last caret position in the formula bar
   const undoRef = useRef([])          // stack of {rowId, colId, old}
   const undoingRef = useRef(false)
+  const sheetRef = useRef(null); sheetRef.current = sheet
 
   // Live refs so formulas always read the latest cell values.
   const rowsRef = useRef(rows); rowsRef.current = rows
@@ -147,7 +148,7 @@ function Workspace() {
     // Stable row order: created_at, then id as tie-breaker so rows never "jump"
     // between reloads (blank sheets insert many rows with the same created_at).
     const { data: r, error } = await supabase.from('rows').select('*').eq('sheet_id', s.id)
-      .order('created_at', { ascending: true }).order('id', { ascending: true }).limit(5000)
+      .order('created_at', { ascending: true }).order('id', { ascending: true }).limit(20000)
     if (error) setErr(error.message)
     setRows(r || []); setLoading(false)
     setRecents(prev => [s, ...prev.filter(x => x.id !== s.id)].slice(0, 8))
@@ -216,7 +217,28 @@ function Workspace() {
 
   const defaultColDef = useMemo(() => ({ sortable: true, resizable: true, filter: true, minWidth: 110 }), [])
 
+  // Excel-like big grid: show up to 10,000 rows. Real (saved) rows sit on top;
+  // the rest are lightweight virtual placeholders that become real on first edit.
+  const TOTAL_ROWS = 10000
+  const displayRows = useMemo(() => {
+    const out = rows.slice()
+    for (let i = rows.length; i < TOTAL_ROWS; i++) out.push({ __v: true, _vi: i, data: {} })
+    return out
+  }, [rows])
+  const getRowId = useCallback((p) => p.data.id ? String(p.data.id) : 'v' + p.data._vi, [])
+
   const onCellValueChanged = useCallback(async (e) => {
+    // Virtual (unsaved) row: create it in the DB on first edit.
+    if (!e.data.id) {
+      const sh = sheetRef.current; if (!sh) return
+      const { data: ins, error } = await supabase.from('rows')
+        .insert({ sheet_id: sh.id, data: e.data.data || {}, source_system: 'manual' })
+        .select().single()
+      if (error) { setErr(error.message); return }
+      setRows(rs => [...rs, ins])
+      e.api.refreshCells({ force: true })
+      return
+    }
     // record for undo (skip while an undo is being applied)
     if (!undoingRef.current && e.colDef.field) {
       undoRef.current.push({ rowId: e.data.id, colId: e.colDef.field, old: e.oldValue })
@@ -264,12 +286,21 @@ function Workspace() {
     if (!field || !field.startsWith('data.')) { setFx({ label: '', value: '', rowId: null, key: null }); return }
     const key = field.slice(5)
     const raw = e.data?.data?.[key]
-    setFx({ label: ref || '?', value: raw == null ? '' : String(raw), rowId: e.data.id, key })
+    setFx({ label: ref || '?', value: raw == null ? '' : String(raw), rowId: e.data.id || null, key })
   }, [fx.rowId])
 
   async function commitFx() {
     fxArmedRef.current = false
-    if (!fx.rowId || !fx.key) return
+    if (!fx.key) return
+    if (!fx.rowId) {
+      // virtual row: create it
+      const sh = sheetRef.current; if (!sh) return
+      const { data: ins, error } = await supabase.from('rows')
+        .insert({ sheet_id: sh.id, data: { [fx.key]: fx.value }, source_system: 'manual' }).select().single()
+      if (error) return setErr(error.message)
+      setRows(rs => [...rs, ins]); setFx(f => ({ ...f, rowId: ins.id }))
+      return
+    }
     const row = rowsRef.current.find(r => r.id === fx.rowId); if (!row) return
     if (!row.data) row.data = {}
     row.data[fx.key] = fx.value
@@ -417,6 +448,21 @@ function Workspace() {
     return () => window.removeEventListener('keydown', h)
   }, []) // eslint-disable-line
 
+  // ---- CSV export (download the sheet like Excel) ----
+  function exportCsv() {
+    if (!sheet) return
+    const esc = (v) => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v }
+    const header = cols.map(c => esc(c.label)).join(',')
+    const body = rows.map(r => cols.map(c => esc(r.data?.[c.key])).join(',')).join('\n')
+    const csv = header + '\n' + body
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = (sheet.name || 'sheet') + '.csv'
+    document.body.appendChild(a); a.click(); a.remove()
+    URL.revokeObjectURL(url)
+  }
+
   async function addRow() {
     if (!sheet) return
     const { data, error } = await supabase.from('rows')
@@ -425,19 +471,16 @@ function Workspace() {
     if (error) return setErr(error.message)
     setRows(r => [...r, data])
   }
-  // New sheet = blank Excel grid: columns A–J and 20 empty rows.
+  // New sheet = blank Excel grid: columns A–AX (50) and a 10,000-row virtual grid.
   async function newSheet() {
     if (!firstWsId) return setErr('No workspace found. Run the schema first.')
     const name = prompt('New sheet name?', 'Sheet1'); if (!name) return
     const { data, error } = await supabase.from('sheets').insert({ workspace_id: firstWsId, name, kind: 'grid' }).select().single()
     if (error) return setErr(error.message)
     const colRows = []
-    for (let i = 0; i < 10; i++) colRows.push({ sheet_id: data.id, key: 'col_' + colLetter(i).toLowerCase(), label: colLetter(i), type: 'text', position: i + 1 })
+    for (let i = 0; i < 50; i++) colRows.push({ sheet_id: data.id, key: 'col_' + colLetter(i).toLowerCase(), label: colLetter(i), type: 'text', position: i + 1 })
     await supabase.from('sheet_columns').insert(colRows)
-    const blankRows = []
-    const base = Date.now()
-    for (let i = 0; i < 20; i++) blankRows.push({ sheet_id: data.id, data: {}, source_system: 'manual', created_at: new Date(base + i * 1000).toISOString() })
-    await supabase.from('rows').insert(blankRows)
+    // No pre-created rows — the grid shows 10,000 virtual rows that become real on first edit.
     loadTree(data.id)
   }
   async function addColumn() {
@@ -499,6 +542,7 @@ function Workspace() {
     if (startCol < 0) return
     const startRow = cell.rowIndex
     const updates = []
+    const inserts = []
     grid.forEach((line, r) => {
       const node = api.getDisplayedRowAtIndex(startRow + r)
       if (!node?.data) return
@@ -507,12 +551,13 @@ function Workspace() {
         const col = cols[startCol + cIdx]; if (!col) return
         node.data.data[col.key] = val
       })
-      updates.push(node.data)
+      if (node.data.id) updates.push(node.data)
+      else inserts.push({ sheet_id: sheet.id, data: node.data.data, source_system: 'manual' })
     })
-    for (const row of updates) {
-      await supabase.from('rows').update({ data: row.data }).eq('id', row.id)
-    }
-    api.refreshCells({ force: true })
+    for (const row of updates) await supabase.from('rows').update({ data: row.data }).eq('id', row.id)
+    if (inserts.length) await supabase.from('rows').insert(inserts)
+    if (inserts.length) selectSheet(sheet)  // reload to pick up new rows
+    else api.refreshCells({ force: true })
   }
 
   const setQuickFilter = (v) => { setQuick(v); gridRef.current?.api.setGridOption('quickFilterText', v) }
@@ -656,7 +701,9 @@ function Workspace() {
             )}
           </div>
           <button className="tbtn" title="Find & Replace (Ctrl+H)" onClick={() => setShowFR(true)}>🔎 Find/Replace</button>
-          <button className="tbtn icon" title="Undo (Ctrl+Z)" onClick={doUndo}>↶</button></>}
+          <button className="tbtn icon" title="Undo (Ctrl+Z)" onClick={doUndo}>↶</button>
+          <span className="sep" />
+          <button className="tbtn" title="Download as CSV" onClick={exportCsv}>⬇ CSV</button></>}
           <span className="sep" />
           <button className="tbtn" onClick={() => setShowImport(true)}>⬇ Import from Smartsheet</button>
           {sheet && !canWrite && <button className="tbtn" onClick={() => setShowReq(true)}>🔒 Request access</button>}
@@ -690,10 +737,11 @@ function Workspace() {
 
         <div className="grid-wrap ag-theme-quartz" onPaste={handlePaste}>
           {sheet ? (
-            <AgGridReact ref={gridRef} rowData={rows} columnDefs={colDefs} defaultColDef={defaultColDef}
+            <AgGridReact ref={gridRef} rowData={displayRows} columnDefs={colDefs} defaultColDef={defaultColDef}
+              getRowId={getRowId}
               onCellValueChanged={onCellValueChanged} onCellClicked={onCellClicked}
               enterNavigatesVertically enterNavigatesVerticallyAfterEdit
-              animateRows enableCellTextSelection stopEditingWhenCellsLoseFocus />
+              rowBuffer={20} enableCellTextSelection stopEditingWhenCellsLoseFocus />
           ) : (
             <div className="empty">{loading ? 'Loading…' : 'Select a sheet on the left, or Import from Smartsheet.'}</div>
           )}
