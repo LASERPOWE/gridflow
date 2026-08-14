@@ -69,6 +69,7 @@ function Workspace() {
   const [showSearch, setShowSearch] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [soon, setSoon] = useState('')        // coming-soon modal label
+  const [confirmDel, setConfirmDel] = useState(null)  // sheet pending delete
   const [recents, setRecents] = useState([])  // recently opened sheets
   const gridRef = useRef()
 
@@ -205,13 +206,13 @@ function Workspace() {
     if (error) return setErr(error.message)
     loadTree(s.id)
   }
-  async function deleteSheet(s) {
-    if (!confirm('Delete sheet "' + s.name + '" and all its data? This cannot be undone.')) return
+  async function reallyDeleteSheet(s) {
     await supabase.from('rows').delete().eq('sheet_id', s.id)
     await supabase.from('sheet_columns').delete().eq('sheet_id', s.id)
     const { error } = await supabase.from('sheets').delete().eq('id', s.id)
     if (error) return setErr(error.message)
     if (sheet?.id === s.id) setSheet(null)
+    setConfirmDel(null)
     loadTree()
   }
 
@@ -277,7 +278,7 @@ function Workspace() {
                         {canWrite && (
                           <span className="sheet-actions">
                             <button title="Rename" onClick={() => renameSheet(s)}>✎</button>
-                            <button title="Delete" onClick={() => deleteSheet(s)}>🗑</button>
+                            <button title="Delete" onClick={() => setConfirmDel(s)}>🗑</button>
                           </span>
                         )}
                       </div>
@@ -357,6 +358,18 @@ function Workspace() {
 
       <SearchModal open={showSearch} onClose={() => setShowSearch(false)}
         sheets={allSheets(tree)} recents={recents} onPick={(s) => { if (view === 'admin') setView('browse'); selectSheet(s) }} />
+
+      {confirmDel && (
+        <SimpleModal title="Delete sheet?" onClose={() => setConfirmDel(null)}>
+          <p style={{ fontSize: 13.5, color: '#3a3f4b', lineHeight: 1.6 }}>
+            Delete <b>{confirmDel.name}</b> and all its rows and columns? This cannot be undone.
+          </p>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+            <button className="btn ghost" onClick={() => setConfirmDel(null)}>Cancel</button>
+            <button className="btn" style={{ background: '#e5484d' }} onClick={() => reallyDeleteSheet(confirmDel)}>Delete</button>
+          </div>
+        </SimpleModal>
+      )}
 
       {soon && (
         <SimpleModal title={soon} onClose={() => setSoon('')}>
