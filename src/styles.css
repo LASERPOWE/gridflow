@@ -102,6 +102,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--ss-blue);border-
 .fxbar .fxinput{flex:1;border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace;background:#fff;color:var(--text)}
 .fxbar .fxinput:focus{outline:none;border-color:var(--ss-blue);box-shadow:0 0 0 3px rgba(47,91,214,.15)}
 .fxbar .fxinput:disabled{background:#f4f6fa;color:#9aa1af}
+.fxbar .fxhint{font-size:11px;color:#2f5bd6;background:#eaf0ff;border-radius:12px;padding:3px 10px;white-space:nowrap;font-weight:600}
 .grid-wrap{flex:1;overflow:hidden}
 .ag-theme-quartz{
   --ag-border-radius:0; --ag-header-background-color:#eef1f5; --ag-header-height:38px;

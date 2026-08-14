@@ -75,6 +75,9 @@ function Workspace() {
   const [frozen, setFrozen] = useState(false) // freeze first data column
   const [fx, setFx] = useState({ label: '', value: '', rowId: null, key: null }) // formula bar
   const gridRef = useRef()
+  const fxInputRef = useRef(null)     // formula bar <input>
+  const fxArmedRef = useRef(false)    // true while building a formula (click cells to insert refs)
+  const fxCursorRef = useRef(0)       // last caret position in the formula bar
 
   // Live refs so formulas always read the latest cell values.
   const rowsRef = useRef(rows); rowsRef.current = rows
@@ -204,18 +207,38 @@ function Workspace() {
     }
   }, [])
 
-  // Formula bar: reflect the clicked cell; edits commit to that cell.
+  // Insert a cell reference (e.g. "A5") into the formula being typed in the bar.
+  function insertRefIntoFx(ref) {
+    const el = fxInputRef.current
+    setFx(f => {
+      const val = f.value || ''
+      let pos = fxCursorRef.current
+      if (pos == null || pos > val.length) pos = val.length
+      const nv = val.slice(0, pos) + ref + val.slice(pos)
+      const np = pos + ref.length
+      fxCursorRef.current = np
+      requestAnimationFrame(() => { if (el) { el.focus(); try { el.setSelectionRange(np, np) } catch { /* noop */ } } })
+      return { ...f, value: nv }
+    })
+  }
+
+  // Formula bar: reflect the clicked cell — OR, while building a formula,
+  // clicking a cell inserts its reference (Excel-style point & click).
   const onCellClicked = useCallback((e) => {
     const field = e.colDef.field
+    const colIdx = field && field.startsWith('data.') ? colsRef.current.findIndex(c => c.key === field.slice(5)) : -1
+    const ref = colIdx >= 0 ? colLetter(colIdx) + (e.rowIndex + 1) : null
+
+    if (fxArmedRef.current && fx.rowId && ref) { insertRefIntoFx(ref); return }
+
     if (!field || !field.startsWith('data.')) { setFx({ label: '', value: '', rowId: null, key: null }); return }
     const key = field.slice(5)
     const raw = e.data?.data?.[key]
-    const colIdx = colsRef.current.findIndex(c => c.key === key)
-    const label = (colIdx >= 0 ? colLetter(colIdx) : '?') + (e.rowIndex + 1)
-    setFx({ label, value: raw == null ? '' : String(raw), rowId: e.data.id, key })
-  }, [])
+    setFx({ label: ref || '?', value: raw == null ? '' : String(raw), rowId: e.data.id, key })
+  }, [fx.rowId])
 
   async function commitFx() {
+    fxArmedRef.current = false
     if (!fx.rowId || !fx.key) return
     const row = rowsRef.current.find(r => r.id === fx.rowId); if (!row) return
     if (!row.data) row.data = {}
@@ -438,10 +461,18 @@ function Workspace() {
           <div className="fxbar">
             <span className="fxcell">{fx.label || '—'}</span>
             <span className="fxsym">ƒx</span>
-            <input className="fxinput" value={fx.value} disabled={!canWrite || !fx.rowId}
-              placeholder={fx.rowId ? 'Type a value or =formula (e.g. =SUM(A1:A5))' : 'Click a cell to edit…'}
-              onChange={e => setFx(f => ({ ...f, value: e.target.value }))}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitFx() } }} />
+            <input ref={fxInputRef} className="fxinput" value={fx.value} disabled={!canWrite || !fx.rowId}
+              placeholder={fx.rowId ? 'Type a value or =formula, then click cells to add refs (e.g. =SUM(A1:A5))' : 'Click a cell to edit…'}
+              onChange={e => { const v = e.target.value; fxCursorRef.current = e.target.selectionStart; fxArmedRef.current = v.trim().startsWith('='); setFx(f => ({ ...f, value: v })) }}
+              onFocus={e => { fxCursorRef.current = e.target.selectionStart; fxArmedRef.current = (fx.value || '').trim().startsWith('=') }}
+              onSelect={e => { fxCursorRef.current = e.target.selectionStart }}
+              onKeyUp={e => { fxCursorRef.current = e.target.selectionStart }}
+              onClick={e => { fxCursorRef.current = e.target.selectionStart }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); commitFx() }
+                else if (e.key === 'Escape') { fxArmedRef.current = false; e.target.blur() }
+              }} />
+            {(fx.value || '').trim().startsWith('=') && <span className="fxhint">click cells to add refs · Enter to apply</span>}
           </div>
         )}
 
