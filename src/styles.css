@@ -91,6 +91,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--ss-blue);border-
 .tbtn.primary{background:var(--ss-blue);color:#fff}
 .tbtn.primary:hover{background:var(--ss-blue-dark)}
 .tbtn.icon{font-weight:700;min-width:30px;justify-content:center}
+.tbtn.on{background:var(--ss-blue);color:#fff;border-color:var(--ss-blue)}
 .toolbar .spacer{flex:1}
 .toolbar .search{width:210px;padding:5px 9px}
 .count{color:var(--muted);font-size:12px}

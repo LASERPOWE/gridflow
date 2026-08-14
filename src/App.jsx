@@ -3,6 +3,7 @@ import { AgGridReact } from 'ag-grid-react'
 import { AuthProvider, useAuth } from './lib/auth.jsx'
 import { supabase } from './lib/supabase'
 import { PillRenderer, inr } from './lib/cells.jsx'
+import { isFormula, evalFormula } from './lib/formula.js'
 import Login from './components/Login.jsx'
 import ImportModal from './components/ImportModal.jsx'
 import IconRail from './components/IconRail.jsx'
@@ -71,7 +72,18 @@ function Workspace() {
   const [soon, setSoon] = useState('')        // coming-soon modal label
   const [confirmDel, setConfirmDel] = useState(null)  // sheet pending delete
   const [recents, setRecents] = useState([])  // recently opened sheets
+  const [frozen, setFrozen] = useState(false) // freeze first data column
   const gridRef = useRef()
+
+  // Live refs so formulas always read the latest cell values.
+  const rowsRef = useRef(rows); rowsRef.current = rows
+  const colsRef = useRef(cols); colsRef.current = cols
+  // resolve(colIdx,rowIdx) -> raw value of that cell (0-based, over the data columns).
+  const resolveCell = useCallback((c, r) => {
+    const rr = rowsRef.current[r]; const cc = colsRef.current[c]
+    if (!rr || !cc) return ''
+    return rr.data?.[cc.key] ?? ''
+  }, [])
 
   const initials = (profile?.full_name || profile?.email || 'U').trim().slice(0, 2).toUpperCase()
   const openSearch = () => setShowSearch(true)
@@ -134,15 +146,22 @@ function Workspace() {
           editable: canWrite, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['low','medium','high','critical'] } },
       )
     }
-    cols.forEach(c => {
+    cols.forEach((c, idx) => {
       const cc = colorClass(c.key, c.label)
       defs.push({
         headerName: c.label, field: 'data.' + c.key,
         valueGetter: p => p.data?.data?.[c.key],
         valueSetter: p => { if (!p.data.data) p.data.data = {}; p.data.data[c.key] = p.newValue; return true },
         editable: canWrite, minWidth: 110, flex: 1, cellClass: cc,
+        pinned: (frozen && idx === 0) ? 'left' : undefined,
         cellRenderer: (c.type === 'status' || c.type === 'priority') ? PillRenderer : undefined,
-        valueFormatter: c.type === 'currency' ? inr : undefined,
+        // Formula cells display the computed result; currency stays formatted.
+        valueFormatter: p => {
+          const raw = p.value
+          if (isFormula(raw)) return String(evalFormula(raw, resolveCell))
+          if (c.type === 'currency') return inr(p)
+          return raw
+        },
         cellEditor: (c.type === 'select' || c.type === 'status' || c.type === 'priority') ? 'agSelectCellEditor' : undefined,
         cellEditorParams: c.options ? { values: c.options } : undefined,
         // per-cell Excel formatting stored in row.data._fmt[key]
@@ -153,12 +172,15 @@ function Workspace() {
             fontStyle: f.i ? 'italic' : undefined,
             textDecoration: f.u ? 'underline' : undefined,
             backgroundColor: f.bg || undefined,
+            color: f.color || undefined,
+            textAlign: f.align || undefined,
+            border: f.bd ? '1px solid #64748b' : undefined,
           }
         },
       })
     })
     return defs
-  }, [cols, isWO, canWrite])
+  }, [cols, isWO, canWrite, frozen, resolveCell])
 
   const defaultColDef = useMemo(() => ({ sortable: true, resizable: true, filter: true, minWidth: 110 }), [])
 
@@ -168,6 +190,8 @@ function Workspace() {
       : { data: e.data.data }
     const { error } = await supabase.from('rows').update(patch).eq('id', e.data.id)
     if (error) setErr(error.message)
+    // recompute any formulas that depend on the changed cell
+    e.api.refreshCells({ force: true })
   }, [])
 
   async function addRow() {
@@ -228,10 +252,43 @@ function Workspace() {
     if (!row.data._fmt) row.data._fmt = {}
     const f = row.data._fmt[key] || {}
     if (kind === 'bg') f.bg = value
-    else f[kind] = !f[kind]
+    else if (kind === 'color') f.color = value
+    else if (kind === 'align') f.align = (f.align === value ? '' : value)
+    else f[kind] = !f[kind]            // b / i / u / bd toggles
     row.data._fmt[key] = f
     await supabase.from('rows').update({ data: row.data }).eq('id', row.id)
     api.refreshCells({ rowNodes: [node], force: true })
+  }
+
+  // Excel-style paste: drop TSV/multiline clipboard text into cells from the focused cell.
+  async function handlePaste(e) {
+    if (!canWrite || !sheet) return
+    const api = gridRef.current?.api; if (!api) return
+    const cell = api.getFocusedCell(); if (!cell) return
+    const text = e.clipboardData?.getData('text/plain'); if (!text) return
+    const grid = text.replace(/\r/g, '').replace(/\n$/, '').split('\n').map(l => l.split('\t'))
+    if (grid.length === 1 && grid[0].length === 1) return  // single value → let AG Grid handle normally
+    e.preventDefault()
+    const field = cell.column.getColId()
+    const startKey = field.startsWith('data.') ? field.slice(5) : field
+    const startCol = cols.findIndex(c => c.key === startKey)
+    if (startCol < 0) return
+    const startRow = cell.rowIndex
+    const updates = []
+    grid.forEach((line, r) => {
+      const node = api.getDisplayedRowAtIndex(startRow + r)
+      if (!node?.data) return
+      if (!node.data.data) node.data.data = {}
+      line.forEach((val, cIdx) => {
+        const col = cols[startCol + cIdx]; if (!col) return
+        node.data.data[col.key] = val
+      })
+      updates.push(node.data)
+    })
+    for (const row of updates) {
+      await supabase.from('rows').update({ data: row.data }).eq('id', row.id)
+    }
+    api.refreshCells({ force: true })
   }
 
   const setQuickFilter = (v) => { setQuick(v); gridRef.current?.api.setGridOption('quickFilterText', v) }
@@ -325,7 +382,17 @@ function Workspace() {
           <label className="tbtn icon fill-btn" title="Fill color (focused cell)">🎨
             <input type="color" onChange={e => applyFormat('bg', e.target.value)} />
           </label>
-          <button className="tbtn icon" title="Clear fill" onClick={() => applyFormat('bg', '')}>⊘</button></>}
+          <label className="tbtn icon fill-btn" title="Text color (focused cell)"><b style={{ color: '#e5484d' }}>A</b>
+            <input type="color" onChange={e => applyFormat('color', e.target.value)} />
+          </label>
+          <button className="tbtn icon" title="Clear fill / color" onClick={() => { applyFormat('bg', ''); applyFormat('color', '') }}>⊘</button>
+          <span className="sep" />
+          <button className="tbtn icon" title="Align left" onClick={() => applyFormat('align', 'left')}>⬅</button>
+          <button className="tbtn icon" title="Align center" onClick={() => applyFormat('align', 'center')}>⬌</button>
+          <button className="tbtn icon" title="Align right" onClick={() => applyFormat('align', 'right')}>➡</button>
+          <button className="tbtn icon" title="Toggle border" onClick={() => applyFormat('bd')}>▢</button>
+          <span className="sep" />
+          <button className={'tbtn icon' + (frozen ? ' on' : '')} title="Freeze first column" onClick={() => setFrozen(f => !f)}>❄</button></>}
           <span className="sep" />
           <button className="tbtn" onClick={() => setShowImport(true)}>⬇ Import from Smartsheet</button>
           {sheet && !canWrite && <button className="tbtn" onClick={() => setShowReq(true)}>🔒 Request access</button>}
@@ -336,7 +403,7 @@ function Workspace() {
 
         {err && <div className="err" style={{ padding: '6px 12px' }}>{err}</div>}
 
-        <div className="grid-wrap ag-theme-quartz">
+        <div className="grid-wrap ag-theme-quartz" onPaste={handlePaste}>
           {sheet ? (
             <AgGridReact ref={gridRef} rowData={rows} columnDefs={colDefs} defaultColDef={defaultColDef}
               onCellValueChanged={onCellValueChanged} animateRows enableCellTextSelection stopEditingWhenCellsLoseFocus />
