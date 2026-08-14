@@ -129,6 +129,7 @@ function Workspace() {
   const [showFR, setShowFR] = useState(false) // find & replace
   const [selectDlg, setSelectDlg] = useState(null) // dropdown-options dialog for a column
   const [treeCollapsed, setTreeCollapsed] = useState(false) // hide sheets sidebar for full-view
+  const [nameDlg, setNameDlg] = useState(null) // new-sheet / rename dialog { mode, value, sheet? }
   const [fnAc, setFnAc] = useState(null)      // formula autocomplete: { items:[[name,desc]], active }
   const gridRef = useRef()
   const fxInputRef = useRef(null)     // formula bar <input>
@@ -540,9 +541,12 @@ function Workspace() {
     setRows(r => [...r, data])
   }
   // New sheet = blank Excel grid: columns A–AX (50) and a 10,000-row virtual grid.
-  async function newSheet() {
+  // Open the naming dialog (in-app, works on mobile — no native prompt()).
+  function newSheet() { setNameDlg({ mode: 'new', value: 'Sheet1' }) }
+
+  // Actually create a blank Excel sheet: 50 columns (A–AX) + 10,000-row virtual grid.
+  async function doCreateSheet(name) {
     if (!firstWsId) return setErr('No workspace found. Run the schema first.')
-    const name = prompt('New sheet name?', 'Sheet1'); if (!name) return
     const { data, error } = await supabase.from('sheets').insert({ workspace_id: firstWsId, name, kind: 'grid' }).select().single()
     if (error) return setErr(error.message)
     const colRows = []
@@ -550,6 +554,17 @@ function Workspace() {
     await supabase.from('sheet_columns').insert(colRows)
     // No pre-created rows — the grid shows 10,000 virtual rows that become real on first edit.
     loadTree(data.id)
+  }
+  async function submitNameDlg() {
+    const d = nameDlg; if (!d || !d.value.trim()) return
+    setNameDlg(null)
+    if (d.mode === 'new') doCreateSheet(d.value.trim())
+    else {
+      if (d.value.trim() === d.sheet.name) return
+      const { error } = await supabase.from('sheets').update({ name: d.value.trim() }).eq('id', d.sheet.id)
+      if (error) return setErr(error.message)
+      loadTree(d.sheet.id)
+    }
   }
   async function addColumn() {
     if (!sheet) return
@@ -559,12 +574,7 @@ function Workspace() {
     if (error) return setErr(error.message)
     selectSheet(sheet)
   }
-  async function renameSheet(s) {
-    const name = prompt('Rename sheet', s.name); if (!name || name === s.name) return
-    const { error } = await supabase.from('sheets').update({ name }).eq('id', s.id)
-    if (error) return setErr(error.message)
-    loadTree(s.id)
-  }
+  function renameSheet(s) { setNameDlg({ mode: 'rename', value: s.name, sheet: s }) }
   async function reallyDeleteSheet(s) {
     await supabase.from('rows').delete().eq('sheet_id', s.id)
     await supabase.from('sheet_columns').delete().eq('sheet_id', s.id)
@@ -843,6 +853,24 @@ function Workspace() {
       )}
 
       {showReq && <RequestAccess sheet={sheet} onClose={() => setShowReq(false)} />}
+
+      {nameDlg && (
+        <SimpleModal title={nameDlg.mode === 'new' ? 'New Excel sheet' : 'Rename sheet'} onClose={() => setNameDlg(null)}>
+          <p style={{ fontSize: 13, color: '#69707d', marginBottom: 10, lineHeight: 1.5 }}>
+            {nameDlg.mode === 'new'
+              ? 'Creates a blank Excel sheet — columns A–AX, 10,000 rows, with formulas, formatting, cell types and everything.'
+              : 'Enter a new name for this sheet.'}
+          </p>
+          <input className="fr-in" style={{ width: '100%' }} autoFocus value={nameDlg.value}
+            placeholder="Sheet name"
+            onChange={e => setNameDlg(d => ({ ...d, value: e.target.value }))}
+            onKeyDown={e => { if (e.key === 'Enter') submitNameDlg() }} />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+            <button className="btn ghost" onClick={() => setNameDlg(null)}>Cancel</button>
+            <button className="btn" onClick={submitNameDlg}>{nameDlg.mode === 'new' ? 'Create sheet' : 'Rename'}</button>
+          </div>
+        </SimpleModal>
+      )}
 
       {showFR && (
         <FindReplace cols={cols} rows={rows} onClose={() => setShowFR(false)}
