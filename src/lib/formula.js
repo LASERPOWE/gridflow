@@ -1,88 +1,250 @@
-// Lightweight Excel-style formula engine.
-// Supports: numbers, + - * / ( ), cell refs (A1), ranges (A1:A5),
-// and functions SUM, AVERAGE, MIN, MAX, COUNT, ROUND, ABS, IF, CONCAT.
-// getCell(colIdx, rowIdx) -> raw value of a cell (0-based indexes).
-
-function colToIndex(letters) {
-  let n = 0
-  for (let i = 0; i < letters.length; i++) n = n * 26 + (letters.charCodeAt(i) - 64)
-  return n - 1
-}
-
-// Parse "A1" -> {c, r} (0-based). Returns null if not a ref.
-function parseRef(ref) {
-  const m = /^([A-Z]+)(\d+)$/.exec(ref)
-  if (!m) return null
-  return { c: colToIndex(m[1]), r: parseInt(m[2], 10) - 1 }
-}
+// Excel-style formula engine (recursive-descent parser).
+// Supports: numbers, strings, booleans, cell refs (A1), ranges (A1:B5),
+// operators + - * / ^  and comparisons =, <>, <, >, <=, >=,
+// parentheses & nesting, and many functions (see FUNCS below).
+// resolve(colIdx, rowIdx) -> raw value of a cell (0-based indexes).
 
 export function isFormula(v) {
   return typeof v === 'string' && v.trim().startsWith('=')
 }
 
-// Evaluate a formula string. resolve(colIdx,rowIdx) returns a cell's raw value.
-export function evalFormula(formula, resolve) {
-  try {
-    let expr = formula.trim().slice(1) // drop '='
-    const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n }
-    const cellVal = (c, r) => {
-      let v = resolve(c, r)
-      if (isFormula(v)) v = evalFormula(v, resolve) // nested
-      return v
+function colToIndex(s) {
+  let n = 0
+  for (let i = 0; i < s.length; i++) n = n * 26 + (s.charCodeAt(i) - 64)
+  return n - 1
+}
+
+// ---- value coercion helpers ----
+function toNum(v) {
+  if (Array.isArray(v)) return toNum(v.length ? v[0] : 0)
+  if (typeof v === 'boolean') return v ? 1 : 0
+  if (v === '' || v === null || v === undefined) return 0
+  const n = parseFloat(v)
+  return isNaN(n) ? 0 : n
+}
+function toStr(v) {
+  if (Array.isArray(v)) return v.map(toStr).join('')
+  if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE'
+  if (v === null || v === undefined) return ''
+  return String(v)
+}
+function toBool(v) {
+  if (Array.isArray(v)) return toBool(v.length ? v[0] : false)
+  if (typeof v === 'boolean') return v
+  if (typeof v === 'number') return v !== 0
+  const s = String(v).trim().toUpperCase()
+  if (s === 'TRUE') return true
+  if (s === 'FALSE' || s === '') return false
+  const n = parseFloat(s)
+  return isNaN(n) ? Boolean(s) : n !== 0
+}
+function flat(args) {
+  const out = []
+  for (const a of args) { if (Array.isArray(a)) out.push(...a); else out.push(a) }
+  return out
+}
+function nums(args) {
+  return flat(args)
+    .filter(v => v !== '' && v !== null && v !== undefined && !isNaN(parseFloat(v)))
+    .map(toNum)
+}
+
+// ---- functions ----
+const FUNCS = {
+  SUM: a => nums(a).reduce((s, x) => s + x, 0),
+  PRODUCT: a => nums(a).reduce((s, x) => s * x, 1),
+  AVERAGE: a => { const n = nums(a); return n.length ? n.reduce((s, x) => s + x, 0) / n.length : 0 },
+  AVG: a => FUNCS.AVERAGE(a),
+  MIN: a => { const n = nums(a); return n.length ? Math.min(...n) : 0 },
+  MAX: a => { const n = nums(a); return n.length ? Math.max(...n) : 0 },
+  COUNT: a => nums(a).length,
+  COUNTA: a => flat(a).filter(v => v !== '' && v !== null && v !== undefined).length,
+  ROUND: a => { const f = Math.pow(10, toNum(a[1] ?? 0)); return Math.round(toNum(a[0]) * f) / f },
+  ROUNDUP: a => { const f = Math.pow(10, toNum(a[1] ?? 0)); return Math.ceil(toNum(a[0]) * f) / f },
+  ROUNDDOWN: a => { const f = Math.pow(10, toNum(a[1] ?? 0)); return Math.floor(toNum(a[0]) * f) / f },
+  INT: a => Math.floor(toNum(a[0])),
+  ABS: a => Math.abs(toNum(a[0])),
+  SQRT: a => Math.sqrt(toNum(a[0])),
+  POWER: a => Math.pow(toNum(a[0]), toNum(a[1])),
+  MOD: a => { const y = toNum(a[1]); return y === 0 ? '#DIV/0!' : toNum(a[0]) % y },
+  IF: a => toBool(a[0]) ? (a[1] ?? '') : (a[2] ?? ''),
+  IFERROR: a => { const v = a[0]; return (typeof v === 'string' && v.startsWith('#')) ? (a[1] ?? '') : v },
+  AND: a => flat(a).every(toBool),
+  OR: a => flat(a).some(toBool),
+  NOT: a => !toBool(a[0]),
+  CONCAT: a => flat(a).map(toStr).join(''),
+  CONCATENATE: a => FUNCS.CONCAT(a),
+  LEN: a => toStr(a[0]).length,
+  LEFT: a => toStr(a[0]).slice(0, toNum(a[1] ?? 1)),
+  RIGHT: a => { const s = toStr(a[0]); const n = toNum(a[1] ?? 1); return s.slice(s.length - n) },
+  MID: a => toStr(a[0]).substring(toNum(a[1]) - 1, toNum(a[1]) - 1 + toNum(a[2])),
+  UPPER: a => toStr(a[0]).toUpperCase(),
+  LOWER: a => toStr(a[0]).toLowerCase(),
+  TRIM: a => toStr(a[0]).trim(),
+  COUNTIF: a => { const arr = Array.isArray(a[0]) ? a[0] : [a[0]]; const t = toStr(a[1]); return arr.filter(v => toStr(v) === t).length },
+}
+
+class Parser {
+  constructor(src, resolve, depth) { this.s = src; this.i = 0; this.resolve = resolve; this.depth = depth || 0 }
+  ws() { while (this.i < this.s.length && /\s/.test(this.s[this.i])) this.i++ }
+  peek() { this.ws(); return this.s[this.i] }
+
+  cellValue(c, r) {
+    let v = this.resolve(c, r)
+    if (isFormula(v)) {
+      if (this.depth > 60) return '#REF!'
+      v = evalFormula(v, this.resolve, this.depth + 1)
     }
-    const rangeVals = (a, b) => {
-      const A = parseRef(a), B = parseRef(b); if (!A || !B) return []
-      const out = []
-      for (let r = Math.min(A.r, B.r); r <= Math.max(A.r, B.r); r++)
-        for (let c = Math.min(A.c, B.c); c <= Math.max(A.c, B.c); c++)
-          out.push(cellVal(c, r))
-      return out
+    return v
+  }
+
+  parseExpression() { return this.parseCompare() }
+
+  parseCompare() {
+    let left = this.parseAdd()
+    for (;;) {
+      this.ws()
+      const two = this.s.substr(this.i, 2)
+      let op = null
+      if (two === '<=' || two === '>=' || two === '<>') { op = two; this.i += 2 }
+      else { const c = this.s[this.i]; if (c === '=' || c === '<' || c === '>') { op = c; this.i++ } }
+      if (!op) break
+      const right = this.parseAdd()
+      const bothNum = !Array.isArray(left) && !Array.isArray(right) &&
+        left !== '' && right !== '' && !isNaN(parseFloat(left)) && !isNaN(parseFloat(right))
+      const L = bothNum ? toNum(left) : toStr(left)
+      const R = bothNum ? toNum(right) : toStr(right)
+      if (op === '=') left = L === R
+      else if (op === '<>') left = L !== R
+      else if (op === '<') left = L < R
+      else if (op === '>') left = L > R
+      else if (op === '<=') left = L <= R
+      else if (op === '>=') left = L >= R
+    }
+    return left
+  }
+
+  parseAdd() {
+    let left = this.parseMul()
+    for (;;) {
+      const c = this.peek()
+      if (c === '+') { this.i++; left = toNum(left) + toNum(this.parseMul()) }
+      else if (c === '-') { this.i++; left = toNum(left) - toNum(this.parseMul()) }
+      else break
+    }
+    return left
+  }
+
+  parseMul() {
+    let left = this.parsePow()
+    for (;;) {
+      const c = this.peek()
+      if (c === '*') { this.i++; left = toNum(left) * toNum(this.parsePow()) }
+      else if (c === '/') { this.i++; const d = toNum(this.parsePow()); left = d === 0 ? NaN : toNum(left) / d }
+      else break
+    }
+    return left
+  }
+
+  parsePow() {
+    const left = this.parseUnary()
+    if (this.peek() === '^') { this.i++; return Math.pow(toNum(left), toNum(this.parsePow())) }
+    return left
+  }
+
+  parseUnary() {
+    const c = this.peek()
+    if (c === '-') { this.i++; return -toNum(this.parseUnary()) }
+    if (c === '+') { this.i++; return toNum(this.parseUnary()) }
+    return this.parsePrimary()
+  }
+
+  parsePrimary() {
+    this.ws()
+    const rest = this.s.slice(this.i)
+    const c = this.s[this.i]
+
+    if (c === '(') { this.i++; const v = this.parseExpression(); this.ws(); if (this.s[this.i] === ')') this.i++; return v }
+    if (c === '"') {
+      this.i++
+      let str = ''
+      while (this.i < this.s.length && this.s[this.i] !== '"') { str += this.s[this.i]; this.i++ }
+      this.i++ // closing quote
+      return str
     }
 
-    // Replace function calls (SUM/AVERAGE/etc.)
-    expr = expr.replace(/([A-Z]+)\s*\(([^()]*)\)/gi, (whole, fn, args) => {
-      fn = fn.toUpperCase()
-      // range arg like A1:A5
-      const rangeM = /^\s*([A-Z]+\d+)\s*:\s*([A-Z]+\d+)\s*$/.exec(args)
-      let vals
-      if (rangeM) vals = rangeVals(rangeM[1], rangeM[2])
-      else vals = args.split(',').map(a => {
-        a = a.trim()
-        const ref = parseRef(a)
-        if (ref) return cellVal(ref.c, ref.r)
-        return a
-      })
-      const nums = vals.map(num)
-      switch (fn) {
-        case 'SUM': return nums.reduce((s, x) => s + x, 0)
-        case 'AVERAGE': return nums.length ? nums.reduce((s, x) => s + x, 0) / nums.length : 0
-        case 'MIN': return nums.length ? Math.min(...nums) : 0
-        case 'MAX': return nums.length ? Math.max(...nums) : 0
-        case 'COUNT': return vals.filter(v => v !== '' && v != null && !isNaN(parseFloat(v))).length
-        case 'ROUND': return Math.round((nums[0] || 0) * Math.pow(10, nums[1] || 0)) / Math.pow(10, nums[1] || 0)
-        case 'ABS': return Math.abs(nums[0] || 0)
-        case 'CONCAT': return vals.join('')
-        case 'IF': {
-          // IF(cond, a, b) — cond as "x>y" style already substituted below; here args are values
-          return vals[0] ? vals[1] : vals[2]
-        }
-        default: return whole
+    // identifier: function call, cell ref/range, or boolean
+    const idM = /^[A-Za-z_]+/.exec(rest)
+    if (idM) {
+      const word = idM[0]
+      let j = this.i + word.length
+      while (j < this.s.length && /\s/.test(this.s[j])) j++
+      if (this.s[j] === '(') {         // function call
+        this.i = j + 1
+        const args = this.parseArgs()
+        this.ws(); if (this.s[this.i] === ')') this.i++
+        const fn = FUNCS[word.toUpperCase()]
+        return fn ? fn(args) : '#NAME?'
       }
-    })
+      const refM = /^([A-Za-z]+)(\d+)/.exec(rest)
+      if (refM) {                      // cell ref, maybe a range
+        this.i += refM[0].length
+        const c1 = colToIndex(refM[1].toUpperCase()), r1 = parseInt(refM[2], 10) - 1
+        this.ws()
+        if (this.s[this.i] === ':') {
+          this.i++; this.ws()
+          const refM2 = /^([A-Za-z]+)(\d+)/.exec(this.s.slice(this.i))
+          if (refM2) {
+            this.i += refM2[0].length
+            const c2 = colToIndex(refM2[1].toUpperCase()), r2 = parseInt(refM2[2], 10) - 1
+            const out = []
+            for (let r = Math.min(r1, r2); r <= Math.max(r1, r2); r++)
+              for (let cc = Math.min(c1, c2); cc <= Math.max(c1, c2); cc++)
+                out.push(this.cellValue(cc, r))
+            return out
+          }
+        }
+        return this.cellValue(c1, r1)
+      }
+      const up = word.toUpperCase()
+      if (up === 'TRUE') return true
+      if (up === 'FALSE') return false
+      return '#NAME?'
+    }
 
-    // Replace remaining cell refs with values
-    expr = expr.replace(/\b([A-Z]+)(\d+)\b/g, (w, col, row) => {
-      const v = cellVal(colToIndex(col), parseInt(row, 10) - 1)
-      const n = parseFloat(v)
-      return isNaN(n) ? JSON.stringify(String(v ?? '')) : String(n)
-    })
+    // number
+    const numM = /^\d*\.?\d+/.exec(rest)
+    if (numM) { this.i += numM[0].length; return parseFloat(numM[0]) }
 
-    // Only allow safe characters now
-    if (!/^[\d\s+\-*/().,"'<>=!&|]*$/.test(expr.replace(/"[^"]*"/g, ''))) return '#ERR'
-    // eslint-disable-next-line no-new-func
-    const result = Function('"use strict";return (' + expr + ')')()
-    return (result === undefined || result === null) ? '' : result
+    this.i++ // skip unknown char
+    return 0
+  }
+
+  parseArgs() {
+    const args = []
+    this.ws()
+    if (this.s[this.i] === ')') return args
+    for (;;) {
+      args.push(this.parseExpression())
+      this.ws()
+      if (this.s[this.i] === ',') { this.i++; continue }
+      break
+    }
+    return args
+  }
+}
+
+export function evalFormula(formula, resolve, depth = 0) {
+  try {
+    const src = String(formula).trim().slice(1) // drop leading '='
+    if (!src) return ''
+    const p = new Parser(src, resolve, depth)
+    let v = p.parseExpression()
+    if (Array.isArray(v)) v = v.length ? v[0] : ''
+    if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE'
+    if (typeof v === 'number') { if (!isFinite(v)) return '#DIV/0!'; return Math.round(v * 1e10) / 1e10 }
+    return (v === null || v === undefined) ? '' : v
   } catch (e) {
-    return '#ERR'
+    return '#ERROR!'
   }
 }
