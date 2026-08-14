@@ -31,6 +31,14 @@ function allSheets(tree) {
   return out
 }
 
+// Excel-style column letters: 0->A, 25->Z, 26->AA, ...
+function colLetter(n) {
+  let s = ''
+  n = n + 1
+  while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26) }
+  return s
+}
+
 // Fixed column colors (Smartsheet-style), matched by column key/label keywords.
 function colorClass(key, label) {
   const s = (key + ' ' + label).toLowerCase()
@@ -131,11 +139,21 @@ function Workspace() {
         headerName: c.label, field: 'data.' + c.key,
         valueGetter: p => p.data?.data?.[c.key],
         valueSetter: p => { if (!p.data.data) p.data.data = {}; p.data.data[c.key] = p.newValue; return true },
-        editable: canWrite, minWidth: 130, flex: 1, cellClass: cc,
+        editable: canWrite, minWidth: 110, flex: 1, cellClass: cc,
         cellRenderer: (c.type === 'status' || c.type === 'priority') ? PillRenderer : undefined,
         valueFormatter: c.type === 'currency' ? inr : undefined,
         cellEditor: (c.type === 'select' || c.type === 'status' || c.type === 'priority') ? 'agSelectCellEditor' : undefined,
         cellEditorParams: c.options ? { values: c.options } : undefined,
+        // per-cell Excel formatting stored in row.data._fmt[key]
+        cellStyle: p => {
+          const f = p.data?.data?._fmt?.[c.key]; if (!f) return null
+          return {
+            fontWeight: f.b ? '700' : undefined,
+            fontStyle: f.i ? 'italic' : undefined,
+            textDecoration: f.u ? 'underline' : undefined,
+            backgroundColor: f.bg || undefined,
+          }
+        },
       })
     })
     return defs
@@ -159,24 +177,60 @@ function Workspace() {
     if (error) return setErr(error.message)
     setRows(r => [...r, data])
   }
+  // New sheet = blank Excel grid: columns A–J and 20 empty rows.
   async function newSheet() {
     if (!firstWsId) return setErr('No workspace found. Run the schema first.')
-    const name = prompt('New sheet name?', 'New Sheet'); if (!name) return
+    const name = prompt('New sheet name?', 'Sheet1'); if (!name) return
     const { data, error } = await supabase.from('sheets').insert({ workspace_id: firstWsId, name, kind: 'grid' }).select().single()
     if (error) return setErr(error.message)
-    await supabase.from('sheet_columns').insert([
-      { sheet_id: data.id, key: 'title', label: 'Title', type: 'text', position: 1 },
-      { sheet_id: data.id, key: 'status', label: 'Status', type: 'status', options: ['open','in_progress','done'], position: 2 },
-    ])
+    const colRows = []
+    for (let i = 0; i < 10; i++) colRows.push({ sheet_id: data.id, key: 'col_' + colLetter(i).toLowerCase(), label: colLetter(i), type: 'text', position: i + 1 })
+    await supabase.from('sheet_columns').insert(colRows)
+    const blankRows = []
+    for (let i = 0; i < 20; i++) blankRows.push({ sheet_id: data.id, data: {}, source_system: 'manual' })
+    await supabase.from('rows').insert(blankRows)
     loadTree(data.id)
   }
   async function addColumn() {
     if (!sheet) return
-    const label = prompt('New column name?'); if (!label) return
-    const key = 'c_' + Math.random().toString(36).slice(2, 8)
+    const key = 'col_' + colLetter(cols.length).toLowerCase()
+    const label = colLetter(cols.length)
     const { error } = await supabase.from('sheet_columns').insert({ sheet_id: sheet.id, key, label, type: 'text', position: cols.length + 1 })
     if (error) return setErr(error.message)
     selectSheet(sheet)
+  }
+  async function renameSheet(s) {
+    const name = prompt('Rename sheet', s.name); if (!name || name === s.name) return
+    const { error } = await supabase.from('sheets').update({ name }).eq('id', s.id)
+    if (error) return setErr(error.message)
+    loadTree(s.id)
+  }
+  async function deleteSheet(s) {
+    if (!confirm('Delete sheet "' + s.name + '" and all its data? This cannot be undone.')) return
+    await supabase.from('rows').delete().eq('sheet_id', s.id)
+    await supabase.from('sheet_columns').delete().eq('sheet_id', s.id)
+    const { error } = await supabase.from('sheets').delete().eq('id', s.id)
+    if (error) return setErr(error.message)
+    if (sheet?.id === s.id) setSheet(null)
+    loadTree()
+  }
+
+  // Apply bold/italic/underline/fill to the focused cell and persist in row.data._fmt.
+  async function applyFormat(kind, value) {
+    const api = gridRef.current?.api; if (!api) return
+    const cell = api.getFocusedCell(); if (!cell) return setErr('Click a cell first, then format.')
+    const node = api.getDisplayedRowAtIndex(cell.rowIndex); if (!node?.data) return
+    const field = cell.column.getColId()            // e.g. "data.col_a"
+    const key = field.startsWith('data.') ? field.slice(5) : field
+    const row = node.data
+    if (!row.data) row.data = {}
+    if (!row.data._fmt) row.data._fmt = {}
+    const f = row.data._fmt[key] || {}
+    if (kind === 'bg') f.bg = value
+    else f[kind] = !f[kind]
+    row.data._fmt[key] = f
+    await supabase.from('rows').update({ data: row.data }).eq('id', row.id)
+    api.refreshCells({ rowNodes: [node], force: true })
   }
 
   const setQuickFilter = (v) => { setQuick(v); gridRef.current?.api.setGridOption('quickFilterText', v) }
@@ -216,9 +270,17 @@ function Workspace() {
                   <div key={w.id}>
                     <div className="node folder" style={{ paddingLeft: 30 }}><span className="ico">📂</span>{w.name}</div>
                     {w.sheets.map(s => (
-                      <button key={s.id} className={'node sheet' + (sheet && sheet.id === s.id ? ' active' : '')} onClick={() => selectSheet(s)}>
-                        <span className="ico">▦</span>{s.name}
-                      </button>
+                      <div key={s.id} className={'sheet-row' + (sheet && sheet.id === s.id ? ' active' : '')}>
+                        <button className="node sheet" onClick={() => selectSheet(s)}>
+                          <span className="ico">▦</span>{s.name}
+                        </button>
+                        {canWrite && (
+                          <span className="sheet-actions">
+                            <button title="Rename" onClick={() => renameSheet(s)}>✎</button>
+                            <button title="Delete" onClick={() => deleteSheet(s)}>🗑</button>
+                          </span>
+                        )}
+                      </div>
                     ))}
                   </div>
                 ))}
@@ -255,14 +317,15 @@ function Workspace() {
         <div className="toolbar">
           {canWrite && <button className="tbtn primary" onClick={addRow}>+ New row</button>}
           {canWrite && <button className="tbtn" onClick={addColumn}>▥ Add column</button>}
+          {canWrite && <><span className="sep" />
+          <button className="tbtn icon" title="Bold (focused cell)" onClick={() => applyFormat('b')}><b>B</b></button>
+          <button className="tbtn icon" title="Italic (focused cell)" onClick={() => applyFormat('i')}><i>I</i></button>
+          <button className="tbtn icon" title="Underline (focused cell)" onClick={() => applyFormat('u')}><u>U</u></button>
+          <label className="tbtn icon fill-btn" title="Fill color (focused cell)">🎨
+            <input type="color" onChange={e => applyFormat('bg', e.target.value)} />
+          </label>
+          <button className="tbtn icon" title="Clear fill" onClick={() => applyFormat('bg', '')}>⊘</button></>}
           <span className="sep" />
-          <button className="tbtn icon" title="Bold"><b>B</b></button>
-          <button className="tbtn icon" title="Italic"><i>I</i></button>
-          <button className="tbtn icon" title="Underline"><u>U</u></button>
-          <button className="tbtn icon" title="Fill color">🎨</button>
-          <span className="sep" />
-          <button className="tbtn" title="Filter">⛃ Filter</button>
-          <button className="tbtn" title="Sort">↕ Sort</button>
           <button className="tbtn" onClick={() => setShowImport(true)}>⬇ Import from Smartsheet</button>
           {sheet && !canWrite && <button className="tbtn" onClick={() => setShowReq(true)}>🔒 Request access</button>}
           <span className="spacer" />
