@@ -109,6 +109,17 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--ss-blue);border-
 .fxbar .fxinput:focus{outline:none;border-color:var(--ss-blue);box-shadow:0 0 0 3px rgba(47,91,214,.15)}
 .fxbar .fxinput:disabled{background:#f4f6fa;color:#9aa1af}
 .fxbar .fxhint{font-size:11px;color:#2f5bd6;background:#eaf0ff;border-radius:12px;padding:3px 10px;white-space:nowrap;font-weight:600}
+.fx-acwrap{position:relative;flex:1;display:flex}
+.fx-acwrap .fxinput{flex:1}
+.fx-ac{position:absolute;top:calc(100% + 4px);left:0;z-index:70;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 10px 28px rgba(16,30,60,.2);min-width:300px;max-height:280px;overflow:auto;padding:5px}
+.fx-ac-item{display:flex;gap:10px;align-items:baseline;width:100%;text-align:left;background:none;border:none;padding:7px 10px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text)}
+.fx-ac-item b{font-family:ui-monospace,Menlo,Consolas,monospace;color:#2f5bd6;min-width:96px}
+.fx-ac-item span{color:#69707d;font-size:12px}
+.fx-ac-item.on,.fx-ac-item:hover{background:#eef3ff}
+/* collapsible sheets sidebar → Excel full view */
+.shell.tree-collapsed{grid-template-columns:64px 1fr}
+.shell.tree-collapsed .tree{display:none}
+.mi-toggle{font-size:15px;padding:4px 8px;margin-right:2px}
 .grid-wrap{flex:1;overflow:hidden}
 .ag-theme-quartz{
   --ag-border-radius:0; --ag-header-background-color:#eef1f5; --ag-header-height:38px;

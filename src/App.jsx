@@ -57,6 +57,49 @@ function fmtPercent(n) { const x = parseFloat(n); return isNaN(x) ? n : x + '%' 
 function fmtDate(v) { if (v === '' || v == null) return v; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }
 const isChecked = (v) => v === true || v === 'true' || v === 1 || v === '1' || v === 'TRUE'
 
+// Formula functions for the autocomplete dropdown (name + short help).
+const FN_LIST = [
+  ['SUM', 'Add up numbers / a range'],
+  ['SUMIF', 'Add cells that match a condition'],
+  ['AVERAGE', 'Average of numbers'],
+  ['AVG', 'Average of numbers'],
+  ['AVERAGEIF', 'Average of cells matching a condition'],
+  ['MEDIAN', 'Middle value'],
+  ['MIN', 'Smallest number'],
+  ['MAX', 'Largest number'],
+  ['COUNT', 'Count numbers'],
+  ['COUNTA', 'Count non-empty cells'],
+  ['COUNTIF', 'Count cells that match a condition'],
+  ['PRODUCT', 'Multiply numbers'],
+  ['ROUND', 'Round to N decimals'],
+  ['ROUNDUP', 'Round up'],
+  ['ROUNDDOWN', 'Round down'],
+  ['INT', 'Integer part'],
+  ['ABS', 'Absolute value'],
+  ['SQRT', 'Square root'],
+  ['POWER', 'x to the power y'],
+  ['MOD', 'Remainder'],
+  ['IF', 'If condition then A else B'],
+  ['IFERROR', 'Value, or fallback on error'],
+  ['AND', 'True if all are true'],
+  ['OR', 'True if any is true'],
+  ['NOT', 'Invert true/false'],
+  ['CONCAT', 'Join text together'],
+  ['CONCATENATE', 'Join text together'],
+  ['LEN', 'Length of text'],
+  ['LEFT', 'Left N characters'],
+  ['RIGHT', 'Right N characters'],
+  ['MID', 'Middle characters'],
+  ['UPPER', 'UPPERCASE text'],
+  ['LOWER', 'lowercase text'],
+  ['TRIM', 'Remove extra spaces'],
+  ['LOOKUP', 'Look up a value in a row/column'],
+  ['VLOOKUP', 'Look up down a table by first column'],
+  ['HLOOKUP', 'Look up across a table by first row'],
+  ['INDEX', 'Value at row/col in a range'],
+  ['MATCH', 'Position of a value in a range'],
+]
+
 function Workspace() {
   const { profile, role, signOut, canWrite, isApprover, isApprover: isAdmin } = useAuth()
   const [tree, setTree] = useState([])
@@ -85,6 +128,8 @@ function Workspace() {
   const [menu, setMenu] = useState(null)      // toolbar dropdown: 'insert' | 'delete' | 'format' | null
   const [showFR, setShowFR] = useState(false) // find & replace
   const [selectDlg, setSelectDlg] = useState(null) // dropdown-options dialog for a column
+  const [treeCollapsed, setTreeCollapsed] = useState(false) // hide sheets sidebar for full-view
+  const [fnAc, setFnAc] = useState(null)      // formula autocomplete: { items:[[name,desc]], active }
   const gridRef = useRef()
   const fxInputRef = useRef(null)     // formula bar <input>
   const fxArmedRef = useRef(false)    // true while building a formula (click cells to insert refs)
@@ -307,6 +352,29 @@ function Workspace() {
     const { error } = await supabase.from('rows').update({ data: row.data }).eq('id', fx.rowId)
     if (error) return setErr(error.message)
     gridRef.current?.api.refreshCells({ force: true })
+  }
+
+  // ---- formula autocomplete (Excel-style function dropdown) ----
+  function updateFnAc(value, caret) {
+    if (!(value || '').trim().startsWith('=')) { setFnAc(null); return }
+    const before = value.slice(0, caret == null ? value.length : caret)
+    const m = /([A-Za-z]+)$/.exec(before)
+    if (!m) { setFnAc(null); return }
+    const token = m[1].toUpperCase()
+    const items = FN_LIST.filter(f => f[0].startsWith(token))
+    setFnAc(items.length ? { items: items.slice(0, 8), active: 0 } : null)
+  }
+  function acceptFn(name) {
+    const el = fxInputRef.current
+    const caret = fxCursorRef.current ?? (fx.value || '').length
+    const before = (fx.value || '').slice(0, caret).replace(/([A-Za-z]+)$/, name + '(')
+    const after = (fx.value || '').slice(caret)
+    const nv = before + after
+    const np = before.length
+    fxCursorRef.current = np
+    setFnAc(null)
+    setFx(f => ({ ...f, value: nv }))
+    requestAnimationFrame(() => { if (el) { el.focus(); try { el.setSelectionRange(np, np) } catch { /* noop */ } } })
   }
 
   // ---- focused-cell helpers ----
@@ -563,12 +631,12 @@ function Workspace() {
   const setQuickFilter = (v) => { setQuick(v); gridRef.current?.api.setGridOption('quickFilterText', v) }
 
   return (
-    <div className={'shell' + (view === 'admin' ? ' admin-mode' : '')}>
+    <div className={'shell' + (view === 'admin' ? ' admin-mode' : '') + (treeCollapsed && view !== 'admin' ? ' tree-collapsed' : '')}>
       <IconRail view={view} onView={changeView} onCreate={newSheet} onSearch={openSearch}
         onNotif={() => setShowNotif(v => !v)} notifCount={notifCount} initials={initials} isAdmin={isAdmin}
-        onProfile={() => setShowProfile(v => !v)} />
+        canWrite={canWrite} onProfile={() => setShowProfile(v => !v)} />
 
-      {view === 'admin' ? (
+      {view === 'admin' && isAdmin ? (
         <AdminPanel />
       ) : (
       <>
@@ -623,6 +691,7 @@ function Workspace() {
       <div className="work">
         {/* top menu bar */}
         <div className="topmenu">
+          <button className="mi mi-toggle" title={treeCollapsed ? 'Show sheets' : 'Hide sheets (full view)'} onClick={() => setTreeCollapsed(c => !c)}>{treeCollapsed ? '▸' : '☰'}</button>
           <button className="mi">File</button>
           <button className="mi">Automation</button>
           <button className="mi">Forms</button>
@@ -717,19 +786,38 @@ function Workspace() {
           <div className="fxbar">
             <span className="fxcell">{fx.label || '—'}</span>
             <span className="fxsym">ƒx</span>
-            <input ref={fxInputRef} className="fxinput" value={fx.value} disabled={!canWrite || !fx.rowId}
-              placeholder={fx.rowId ? 'Type a value or =formula, then click cells to add refs (e.g. =SUM(A1:A5))' : 'Click a cell to edit…'}
-              onChange={e => { const v = e.target.value; fxCursorRef.current = e.target.selectionStart; fxArmedRef.current = v.trim().startsWith('='); setFx(f => ({ ...f, value: v })) }}
-              onFocus={e => { fxCursorRef.current = e.target.selectionStart; fxArmedRef.current = (fx.value || '').trim().startsWith('=') }}
-              onSelect={e => { fxCursorRef.current = e.target.selectionStart }}
-              onKeyUp={e => { fxCursorRef.current = e.target.selectionStart }}
-              onClick={e => { fxCursorRef.current = e.target.selectionStart }}
-              onKeyDown={e => {
-                if (e.key === 'Enter') { e.preventDefault(); commitFx() }
-                else if (e.key === 'Escape') { fxArmedRef.current = false; e.target.blur() }
-              }}
-              onBlur={() => { if (fxArmedRef.current) setTimeout(() => { if (fxArmedRef.current) fxInputRef.current?.focus() }, 0) }} />
-            {(fx.value || '').trim().startsWith('=') && <span className="fxhint">click cells to add refs · Enter to apply</span>}
+            <div className="fx-acwrap">
+              <input ref={fxInputRef} className="fxinput" value={fx.value} disabled={!canWrite || !fx.rowId}
+                placeholder={fx.rowId ? 'Type =SUM… for suggestions, then click cells to add refs' : 'Click a cell to edit…'}
+                onChange={e => { const v = e.target.value; fxCursorRef.current = e.target.selectionStart; fxArmedRef.current = v.trim().startsWith('='); setFx(f => ({ ...f, value: v })); updateFnAc(v, e.target.selectionStart) }}
+                onFocus={e => { fxCursorRef.current = e.target.selectionStart; fxArmedRef.current = (fx.value || '').trim().startsWith('=') }}
+                onSelect={e => { fxCursorRef.current = e.target.selectionStart }}
+                onKeyUp={e => { fxCursorRef.current = e.target.selectionStart; if (!['Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'Escape'].includes(e.key)) updateFnAc(e.target.value, e.target.selectionStart) }}
+                onClick={e => { fxCursorRef.current = e.target.selectionStart }}
+                onKeyDown={e => {
+                  if (fnAc) {
+                    if (e.key === 'ArrowDown') { e.preventDefault(); setFnAc(a => ({ ...a, active: (a.active + 1) % a.items.length })); return }
+                    if (e.key === 'ArrowUp') { e.preventDefault(); setFnAc(a => ({ ...a, active: (a.active - 1 + a.items.length) % a.items.length })); return }
+                    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); acceptFn(fnAc.items[fnAc.active][0]); return }
+                    if (e.key === 'Escape') { e.preventDefault(); setFnAc(null); return }
+                  }
+                  if (e.key === 'Enter') { e.preventDefault(); commitFx() }
+                  else if (e.key === 'Escape') { fxArmedRef.current = false; e.target.blur() }
+                }}
+                onBlur={() => { if (fxArmedRef.current) setTimeout(() => { if (fxArmedRef.current) fxInputRef.current?.focus() }, 0) }} />
+              {fnAc && (
+                <div className="fx-ac">
+                  {fnAc.items.map((f, i) => (
+                    <button key={f[0]} className={'fx-ac-item' + (i === fnAc.active ? ' on' : '')}
+                      onMouseDown={e => { e.preventDefault(); acceptFn(f[0]) }}
+                      onMouseEnter={() => setFnAc(a => (a ? { ...a, active: i } : a))}>
+                      <b>{f[0]}</b><span>{f[1]}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {(fx.value || '').trim().startsWith('=') && <span className="fxhint">↑↓ pick · Tab/Enter insert · click cells for refs</span>}
           </div>
         )}
 
