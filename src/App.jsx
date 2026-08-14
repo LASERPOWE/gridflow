@@ -15,6 +15,7 @@ import ProfileMenu from './components/ProfileMenu.jsx'
 import SearchModal from './components/SearchModal.jsx'
 import SimpleModal from './components/SimpleModal.jsx'
 import FindReplace from './components/FindReplace.jsx'
+import ShareModal from './components/ShareModal.jsx'
 
 // smartsheet logo mark (reused)
 function Mark({ size = 20 }) {
@@ -130,6 +131,7 @@ function Workspace() {
   const [selectDlg, setSelectDlg] = useState(null) // dropdown-options dialog for a column
   const [treeCollapsed, setTreeCollapsed] = useState(false) // hide sheets sidebar for full-view
   const [nameDlg, setNameDlg] = useState(null) // new-sheet / rename dialog { mode, value, sheet? }
+  const [showShare, setShowShare] = useState(false) // share-sheet dialog
   const [fnAc, setFnAc] = useState(null)      // formula autocomplete: { items:[[name,desc]], active }
   const gridRef = useRef()
   const fxInputRef = useRef(null)     // formula bar <input>
@@ -782,7 +784,8 @@ function Workspace() {
           <button className="tbtn" title="Find & Replace (Ctrl+H)" onClick={() => setShowFR(true)}>🔎 Find/Replace</button>
           <button className="tbtn icon" title="Undo (Ctrl+Z)" onClick={doUndo}>↶</button>
           <span className="sep" />
-          <button className="tbtn" title="Download as CSV" onClick={exportCsv}>⬇ CSV</button></>}
+          <button className="tbtn" title="Download as CSV" onClick={exportCsv}>⬇ CSV</button>
+          {sheet && <button className="tbtn primary" title="Share this sheet by email" onClick={() => setShowShare(true)}>🔗 Share</button>}</>}
           <span className="sep" />
           <button className="tbtn" onClick={() => setShowImport(true)}>⬇ Import from Smartsheet</button>
           {sheet && !canWrite && <button className="tbtn" onClick={() => setShowReq(true)}>🔒 Request access</button>}
@@ -853,6 +856,8 @@ function Workspace() {
       )}
 
       {showReq && <RequestAccess sheet={sheet} onClose={() => setShowReq(false)} />}
+
+      {showShare && sheet && <ShareModal sheet={sheet} onClose={() => setShowShare(false)} />}
 
       {nameDlg && (
         <SimpleModal title={nameDlg.mode === 'new' ? 'New Excel sheet' : 'Rename sheet'} onClose={() => setNameDlg(null)}>
