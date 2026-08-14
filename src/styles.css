@@ -418,6 +418,80 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:0 0 0 3px rgba(4
 .sheet-actions button{border:none;background:none;cursor:pointer;font-size:12px;opacity:.6;padding:2px 4px;border-radius:5px}
 .sheet-actions button:hover{opacity:1;background:rgba(47,91,214,.12)}
 
+/* ============================================================
+   Mobile / responsive
+   ============================================================ */
+html,body{overflow-x:hidden}
+
+/* tablet: hide the sheets tree, keep everything else */
+@media (max-width:900px){
+  .shell,.shell.admin-mode,.shell.tree-collapsed{grid-template-columns:56px 1fr}
+  .tree{display:none}
+  .toolbar{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden}
+  .toolbar .tbtn,.toolbar .tb-drop,.toolbar .sep{flex:0 0 auto}
+}
+
+/* phones */
+@media (max-width:640px){
+  .shell,.shell.admin-mode,.shell.tree-collapsed{grid-template-columns:50px 1fr}
+
+  /* icon rail: slim, icons only */
+  .rail{padding:6px 0}
+  .rail-item{padding:9px 0}
+  .rail-label{display:none}
+  .rail-brand{width:30px;height:30px}
+  .rail-ico{font-size:19px}
+  .rail-avatar{width:28px;height:28px;font-size:10px}
+
+  /* top menu: single scrollable row */
+  .topmenu{height:42px;padding:0 6px;gap:0;overflow-x:auto;overflow-y:hidden;white-space:nowrap}
+  .topmenu::-webkit-scrollbar{display:none}
+  .topmenu .mi{padding:7px 8px;font-size:12.5px;flex:0 0 auto}
+  .topmenu .doc{margin:0 8px;font-size:13px;flex:0 0 auto;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .topmenu-search{display:none}
+  .topmenu-avatar-wrap{margin-left:auto}
+
+  /* toolbar: one scrollable row, drop the filler + count */
+  .toolbar{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;gap:3px;padding:6px 8px}
+  .toolbar::-webkit-scrollbar{height:0}
+  .toolbar .tbtn,.toolbar .tb-drop,.toolbar .sep{flex:0 0 auto}
+  .toolbar .spacer{display:none}
+  .toolbar .search{width:130px;flex:0 0 auto}
+  .count{display:none}
+  .tb-menu{left:auto;right:0}
+
+  /* formula bar: compact, no hint */
+  .fxbar{padding:5px 8px;gap:6px}
+  .fxbar .fxhint{display:none}
+  .fxbar .fxcell{min-width:40px;font-size:11.5px;padding:3px 4px}
+  .fx-ac{min-width:200px;max-width:calc(100vw - 90px)}
+  .fx-ac-item b{min-width:74px}
+
+  /* grid: use all the space */
+  .grid-wrap{padding:6px}
+  .ag-theme-quartz{border-radius:8px;--ag-row-height:38px;--ag-header-height:38px}
+
+  /* notifications & profile menu full-ish width */
+  .notif-panel{left:50px;width:calc(100vw - 50px);border-radius:0}
+  .pm{width:min(250px,calc(100vw - 20px));right:6px}
+
+  /* admin panel: tighter + scrollable tables/tabs */
+  .admin{padding:14px 12px}
+  .admin-head h1{font-size:20px}
+  .admin-tabs{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
+  .admin-tabs button{flex:0 0 auto}
+  .admin-card{padding:12px 10px;overflow-x:auto}
+  .admin-table{min-width:460px}
+  .admin-req{flex-direction:column;align-items:flex-start;gap:8px}
+
+  /* modals / dialogs / search fit the screen */
+  .modal{max-width:94vw}
+  .fg{grid-template-columns:1fr}
+  .search-overlay{padding-top:60px}
+  .search-box{width:94vw}
+  .auth-card{width:92vw}
+}
+
 /* fill-color button wraps a hidden color input */
 .fill-btn{position:relative;overflow:hidden;display:inline-flex;align-items:center;cursor:pointer}
 .fill-btn input[type=color]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
