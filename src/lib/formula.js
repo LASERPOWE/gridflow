@@ -1,7 +1,7 @@
-// Excel-style formula engine (recursive-descent parser).
-// Supports: numbers, strings, booleans, cell refs (A1), ranges (A1:B5),
-// operators + - * / ^  and comparisons =, <>, <, >, <=, >=,
-// parentheses & nesting, and many functions (see FUNCS below).
+// Excel-style formula engine (recursive-descent parser) with 2D ranges.
+// Supports numbers, strings, booleans, cell refs (A1), ranges (A1:B5),
+// operators + - * / ^ and comparisons =, <>, <, >, <=, >=, parentheses,
+// nesting, and a broad set of functions incl. lookup family.
 // resolve(colIdx, rowIdx) -> raw value of a cell (0-based indexes).
 
 export function isFormula(v) {
@@ -14,8 +14,17 @@ function colToIndex(s) {
   return n - 1
 }
 
-// ---- value coercion helpers ----
+// A range is { _grid: [[cell,...rowcells], ...] } (row-major 2D).
+function isRange(v) { return v && typeof v === 'object' && !Array.isArray(v) && Array.isArray(v._grid) }
+function cells1D(v) {
+  if (isRange(v)) { const o = []; for (const row of v._grid) for (const c of row) o.push(c); return o }
+  if (Array.isArray(v)) return v
+  return [v]
+}
+
+// ---- value coercion ----
 function toNum(v) {
+  if (isRange(v)) return toNum(cells1D(v)[0])
   if (Array.isArray(v)) return toNum(v.length ? v[0] : 0)
   if (typeof v === 'boolean') return v ? 1 : 0
   if (v === '' || v === null || v === undefined) return 0
@@ -23,12 +32,14 @@ function toNum(v) {
   return isNaN(n) ? 0 : n
 }
 function toStr(v) {
+  if (isRange(v)) return cells1D(v).map(toStr).join('')
   if (Array.isArray(v)) return v.map(toStr).join('')
   if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE'
   if (v === null || v === undefined) return ''
   return String(v)
 }
 function toBool(v) {
+  if (isRange(v)) return toBool(cells1D(v)[0])
   if (Array.isArray(v)) return toBool(v.length ? v[0] : false)
   if (typeof v === 'boolean') return v
   if (typeof v === 'number') return v !== 0
@@ -40,7 +51,11 @@ function toBool(v) {
 }
 function flat(args) {
   const out = []
-  for (const a of args) { if (Array.isArray(a)) out.push(...a); else out.push(a) }
+  for (const a of args) {
+    if (isRange(a)) { for (const row of a._grid) for (const c of row) out.push(c) }
+    else if (Array.isArray(a)) out.push(...a)
+    else out.push(a)
+  }
   return out
 }
 function nums(args) {
@@ -49,16 +64,37 @@ function nums(args) {
     .map(toNum)
 }
 
-// ---- functions ----
+// criteria like ">5", "<=10", "<>x", "=foo", or a plain value
+function matchCrit(cell, crit) {
+  const cs = toStr(crit).trim()
+  const m = /^(>=|<=|<>|>|<|=)?(.*)$/.exec(cs)
+  const op = m[1] || '='
+  const rhs = m[2]
+  const cn = parseFloat(cell), rn = parseFloat(rhs)
+  const bothNum = !isNaN(cn) && !isNaN(rn)
+  if (op === '=') return bothNum ? cn === rn : toStr(cell) === rhs
+  if (op === '<>') return bothNum ? cn !== rn : toStr(cell) !== rhs
+  if (!bothNum) return false
+  if (op === '>') return cn > rn
+  if (op === '<') return cn < rn
+  if (op === '>=') return cn >= rn
+  if (op === '<=') return cn <= rn
+  return false
+}
+
 const FUNCS = {
   SUM: a => nums(a).reduce((s, x) => s + x, 0),
   PRODUCT: a => nums(a).reduce((s, x) => s * x, 1),
   AVERAGE: a => { const n = nums(a); return n.length ? n.reduce((s, x) => s + x, 0) / n.length : 0 },
   AVG: a => FUNCS.AVERAGE(a),
+  MEDIAN: a => { const n = nums(a).sort((x, y) => x - y); if (!n.length) return 0; const m = Math.floor(n.length / 2); return n.length % 2 ? n[m] : (n[m - 1] + n[m]) / 2 },
   MIN: a => { const n = nums(a); return n.length ? Math.min(...n) : 0 },
   MAX: a => { const n = nums(a); return n.length ? Math.max(...n) : 0 },
   COUNT: a => nums(a).length,
   COUNTA: a => flat(a).filter(v => v !== '' && v !== null && v !== undefined).length,
+  COUNTIF: a => { const r = cells1D(a[0]); return r.filter(v => matchCrit(v, a[1])).length },
+  SUMIF: a => { const r = cells1D(a[0]); const sr = a[2] != null ? cells1D(a[2]) : r; let s = 0; for (let i = 0; i < r.length; i++) if (matchCrit(r[i], a[1])) s += toNum(sr[i]); return s },
+  AVERAGEIF: a => { const r = cells1D(a[0]); const sr = a[2] != null ? cells1D(a[2]) : r; let s = 0, c = 0; for (let i = 0; i < r.length; i++) if (matchCrit(r[i], a[1])) { s += toNum(sr[i]); c++ } return c ? s / c : 0 },
   ROUND: a => { const f = Math.pow(10, toNum(a[1] ?? 0)); return Math.round(toNum(a[0]) * f) / f },
   ROUNDUP: a => { const f = Math.pow(10, toNum(a[1] ?? 0)); return Math.ceil(toNum(a[0]) * f) / f },
   ROUNDDOWN: a => { const f = Math.pow(10, toNum(a[1] ?? 0)); return Math.floor(toNum(a[0]) * f) / f },
@@ -81,7 +117,58 @@ const FUNCS = {
   UPPER: a => toStr(a[0]).toUpperCase(),
   LOWER: a => toStr(a[0]).toLowerCase(),
   TRIM: a => toStr(a[0]).trim(),
-  COUNTIF: a => { const arr = Array.isArray(a[0]) ? a[0] : [a[0]]; const t = toStr(a[1]); return arr.filter(v => toStr(v) === t).length },
+  // ---- lookup family ----
+  LOOKUP: a => {
+    const val = a[0]
+    const vec = cells1D(a[1])
+    const res = a[2] != null ? cells1D(a[2]) : vec
+    let idx = vec.findIndex(v => String(v) === String(val))
+    if (idx < 0) { // approximate: largest numeric <= val (assumes ascending)
+      const lv = toNum(val); let best = -1
+      for (let i = 0; i < vec.length; i++) { const n = parseFloat(vec[i]); if (!isNaN(n) && n <= lv) best = i }
+      idx = best
+    }
+    return idx >= 0 ? (res[idx] ?? '') : '#N/A'
+  },
+  VLOOKUP: a => {
+    const val = a[0], tbl = a[1], col = toNum(a[2])
+    const exact = a[3] != null ? !toBool(a[3]) : false
+    if (!isRange(tbl)) return '#N/A'
+    const g = tbl._grid
+    for (const row of g) {
+      if (String(row[0]) === String(val) || (parseFloat(row[0]) === toNum(val) && !isNaN(parseFloat(row[0])))) {
+        return row[col - 1] ?? '#REF!'
+      }
+    }
+    if (!exact) { // approximate match on first column
+      const lv = toNum(val); let best = null
+      for (const row of g) { const n = parseFloat(row[0]); if (!isNaN(n) && n <= lv) best = row }
+      if (best) return best[col - 1] ?? '#REF!'
+    }
+    return '#N/A'
+  },
+  HLOOKUP: a => {
+    const val = a[0], tbl = a[1], rowIdx = toNum(a[2])
+    if (!isRange(tbl)) return '#N/A'
+    const g = tbl._grid; const header = g[0] || []
+    for (let c = 0; c < header.length; c++) {
+      if (String(header[c]) === String(val) || parseFloat(header[c]) === toNum(val)) {
+        return (g[rowIdx - 1] && g[rowIdx - 1][c]) ?? '#REF!'
+      }
+    }
+    return '#N/A'
+  },
+  INDEX: a => {
+    const g = isRange(a[0]) ? a[0]._grid : [[a[0]]]
+    const r = toNum(a[1]); const c = a[2] != null ? toNum(a[2]) : 1
+    const row = g[r - 1]; if (!row) return '#REF!'
+    return (row[c - 1] != null) ? row[c - 1] : (row[0] ?? '#REF!')
+  },
+  MATCH: a => {
+    const val = a[0]; const arr = cells1D(a[1])
+    for (let i = 0; i < arr.length; i++) if (String(arr[i]) === String(val) || (parseFloat(arr[i]) === toNum(val) && !isNaN(parseFloat(arr[i])))) return i + 1
+    return '#N/A'
+  },
 }
 
 class Parser {
@@ -110,7 +197,7 @@ class Parser {
       else { const c = this.s[this.i]; if (c === '=' || c === '<' || c === '>') { op = c; this.i++ } }
       if (!op) break
       const right = this.parseAdd()
-      const bothNum = !Array.isArray(left) && !Array.isArray(right) &&
+      const bothNum = !isRange(left) && !isRange(right) && !Array.isArray(left) && !Array.isArray(right) &&
         left !== '' && right !== '' && !isNaN(parseFloat(left)) && !isNaN(parseFloat(right))
       const L = bothNum ? toNum(left) : toStr(left)
       const R = bothNum ? toNum(right) : toStr(right)
@@ -173,7 +260,6 @@ class Parser {
       return str
     }
 
-    // identifier: function call, cell ref/range, or boolean
     const idM = /^[A-Za-z_]+/.exec(rest)
     if (idM) {
       const word = idM[0]
@@ -197,11 +283,13 @@ class Parser {
           if (refM2) {
             this.i += refM2[0].length
             const c2 = colToIndex(refM2[1].toUpperCase()), r2 = parseInt(refM2[2], 10) - 1
-            const out = []
-            for (let r = Math.min(r1, r2); r <= Math.max(r1, r2); r++)
-              for (let cc = Math.min(c1, c2); cc <= Math.max(c1, c2); cc++)
-                out.push(this.cellValue(cc, r))
-            return out
+            const grid = []
+            for (let r = Math.min(r1, r2); r <= Math.max(r1, r2); r++) {
+              const row = []
+              for (let cc = Math.min(c1, c2); cc <= Math.max(c1, c2); cc++) row.push(this.cellValue(cc, r))
+              grid.push(row)
+            }
+            return { _grid: grid }
           }
         }
         return this.cellValue(c1, r1)
@@ -212,7 +300,6 @@ class Parser {
       return '#NAME?'
     }
 
-    // number
     const numM = /^\d*\.?\d+/.exec(rest)
     if (numM) { this.i += numM[0].length; return parseFloat(numM[0]) }
 
@@ -240,7 +327,8 @@ export function evalFormula(formula, resolve, depth = 0) {
     if (!src) return ''
     const p = new Parser(src, resolve, depth)
     let v = p.parseExpression()
-    if (Array.isArray(v)) v = v.length ? v[0] : ''
+    if (isRange(v)) v = cells1D(v)[0] ?? ''
+    else if (Array.isArray(v)) v = v.length ? v[0] : ''
     if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE'
     if (typeof v === 'number') { if (!isFinite(v)) return '#DIV/0!'; return Math.round(v * 1e10) / 1e10 }
     return (v === null || v === undefined) ? '' : v
