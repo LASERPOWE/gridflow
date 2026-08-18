@@ -30,9 +30,11 @@ export default function ShareModal({ sheet, onClose }) {
   // (a secure sign-in link). Clicking it signs them in and they land on the app
   // with this sheet already shared. No mail app / Outlook opens.
   async function sendEmail(toEmail, toName) {
+    // Redirect straight to the shared sheet after they sign in via the email link.
+    const redirect = window.location.origin + '/?sheet=' + sheet.id
     const { error } = await supabase.auth.signInWithOtp({
       email: toEmail,
-      options: { shouldCreateUser: true, emailRedirectTo: window.location.origin, data: { sheet: sheet.name, to_name: toName || '' } },
+      options: { shouldCreateUser: true, emailRedirectTo: redirect, data: { sheet: sheet.name, to_name: toName || '' } },
     })
     return !error ? true : (error.message || 'send failed')
   }
