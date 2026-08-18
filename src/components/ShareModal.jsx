@@ -8,6 +8,7 @@ import SimpleModal from './SimpleModal.jsx'
 export default function ShareModal({ sheet, onClose }) {
   const { profile } = useAuth()
   const [email, setEmail] = useState('')
+  const [name, setName] = useState('')
   const [access, setAccess] = useState([])
   const [pending, setPending] = useState([])
   const [msg, setMsg] = useState('')
@@ -28,10 +29,10 @@ export default function ShareModal({ sheet, onClose }) {
   // Send the person a real email straight from Supabase's built-in mail service
   // (a secure sign-in link). Clicking it signs them in and they land on the app
   // with this sheet already shared. No mail app / Outlook opens.
-  async function sendEmail(toEmail) {
+  async function sendEmail(toEmail, toName) {
     const { error } = await supabase.auth.signInWithOtp({
       email: toEmail,
-      options: { shouldCreateUser: true, emailRedirectTo: window.location.origin, data: { sheet: sheet.name } },
+      options: { shouldCreateUser: true, emailRedirectTo: window.location.origin, data: { sheet: sheet.name, to_name: toName || '' } },
     })
     return !error ? true : (error.message || 'send failed')
   }
@@ -39,6 +40,7 @@ export default function ShareModal({ sheet, onClose }) {
   async function share(e) {
     e.preventDefault()
     const em = email.trim().toLowerCase()
+    const nm = name.trim()
     if (!em) return
     setBusy(true); setMsg('Sharing…')
     const { data: p } = await supabase.from('profiles').select('id,email').ilike('email', em).maybeSingle()
@@ -51,10 +53,10 @@ export default function ShareModal({ sheet, onClose }) {
       const { error } = await supabase.from('pending_shares').insert({ email: em, sheet_id: sheet.id })
       if (error) { setBusy(false); return setMsg('Error: ' + error.message) }
     }
-    const sent = await sendEmail(em)
-    if (sent === true) setMsg(`✓ Shared with ${em} — a sign-in email has been sent to them.`)
+    const sent = await sendEmail(em, nm)
+    if (sent === true) setMsg(`✓ Shared with ${nm ? nm + ' (' + em + ')' : em} — an email has been sent to them.`)
     else setMsg(`✓ Access granted to ${em}, but the email couldn't send (${sent}). They can still sign in with this email to see it.`)
-    setEmail(''); setBusy(false); load()
+    setEmail(''); setName(''); setBusy(false); load()
   }
 
   async function removeAccess(id) { setBusy(true); await supabase.from('sheet_access').delete().eq('id', id); setBusy(false); load() }
@@ -63,8 +65,10 @@ export default function ShareModal({ sheet, onClose }) {
   return (
     <SimpleModal title={`Share "${sheet.name}"`} onClose={onClose}>
       <form onSubmit={share} className="share-add">
+        <input className="fr-in" type="text" placeholder="Name (optional)" value={name}
+          onChange={e => setName(e.target.value)} style={{ flex: 1 }} />
         <input className="fr-in" type="email" placeholder="person@company.com" value={email}
-          onChange={e => setEmail(e.target.value)} autoFocus required style={{ flex: 1 }} />
+          onChange={e => setEmail(e.target.value)} autoFocus required style={{ flex: 1.4 }} />
         <button className="btn" disabled={busy}>Share</button>
       </form>
       {msg && <div className="share-msg">{msg}</div>}
