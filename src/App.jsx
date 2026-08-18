@@ -185,7 +185,13 @@ function Workspace() {
     const target = selectId ? S.find(x => x.id === selectId) : (sheet ? S.find(x => x.id === sheet.id) : S[0])
     if (target) selectSheet(target)
   }
-  useEffect(() => { loadTree().finally(() => window.setTimeout(() => setBusy(false), 500)) }, []) // eslint-disable-line
+  useEffect(() => {
+    // Deep-link: ?sheet=<id> (from a share email's "Open smartsheet" button) opens that sheet directly.
+    let wantSheet = null
+    try { wantSheet = new URLSearchParams(window.location.search).get('sheet') } catch { /* noop */ }
+    loadTree(wantSheet).finally(() => window.setTimeout(() => setBusy(false), 500))
+    if (wantSheet) { try { window.history.replaceState({}, '', window.location.pathname) } catch { /* noop */ } }
+  }, []) // eslint-disable-line
 
   async function selectSheet(s) {
     const switching = !sheet || sheet.id !== s.id
