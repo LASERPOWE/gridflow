@@ -60,6 +60,14 @@ function fmtPercent(n) { const x = parseFloat(n); return isNaN(x) ? n : x + '%' 
 function fmtDate(v) { if (v === '' || v == null) return v; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }
 // Date + time for the "Uploaded" column (when a row was added).
 function fmtDateTime(v) { if (!v) return ''; const d = new Date(v); return isNaN(d.getTime()) ? '' : d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }
+// How long a refresh took — shown in seconds (or minutes), never milliseconds.
+function fmtDuration(ms) {
+  if (ms == null) return '—'
+  const s = ms / 1000
+  if (s < 60) return (s < 10 ? s.toFixed(1) : Math.round(s)) + ' sec'
+  const m = Math.floor(s / 60), rem = Math.round(s % 60)
+  return rem ? `${m} min ${rem} sec` : `${m} min`
+}
 const isChecked = (v) => v === true || v === 'true' || v === 1 || v === '1' || v === 'TRUE'
 
 // Custom grid header: single-click sorts, double-click opens the column editor
@@ -268,7 +276,7 @@ function Workspace() {
     setTimeout(() => { try { gridRef.current?.api?.refreshCells({ columns: [field], force: true }) } catch { /* noop */ } }, 0)
     const lbl = colsRef.current.find(c => c.key === colKey)?.label || 'Column'
     logRefresh('column', lbl, dur)
-    toast(`🔄 ${lbl} refreshed (${dur} ms)`)
+    toast(`🔄 ${lbl} refreshed (${fmtDuration(dur)})`)
   }
   refreshColRef.current = refreshColumn
 
@@ -279,7 +287,7 @@ function Workspace() {
     await selectSheet(sheet)
     const dur = Date.now() - t0
     logRefresh('sheet', null, dur)
-    toast(`Refreshed ✓ (${dur} ms)`)
+    toast(`Refreshed ✓ (${fmtDuration(dur)})`)
   }
 
   async function saveColDlg() {
@@ -1262,7 +1270,7 @@ function Workspace() {
                     <td>{fmtDateTime(r.created_at)}</td>
                     <td>{r.sheet_name || '—'}</td>
                     <td>{r.scope === 'column' ? (r.column_label || 'Column') : 'Whole sheet'}</td>
-                    <td style={{ textAlign: 'right' }}>{r.duration_ms != null ? r.duration_ms + ' ms' : '—'}</td>
+                    <td style={{ textAlign: 'right' }}>{fmtDuration(r.duration_ms)}</td>
                   </tr>
                 ))}
               </tbody>
