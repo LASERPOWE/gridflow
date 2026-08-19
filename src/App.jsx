@@ -336,9 +336,7 @@ function Workspace() {
         cellEditor: (c.type === 'select' || c.type === 'status' || c.type === 'priority') ? 'agSelectCellEditor'
           : c.type === 'date' ? 'agDateStringCellEditor'
           : FormulaEditor,   // type = in any cell -> inline function dropdown, result in the same cell
-        cellEditorParams: (c.type === 'select' || c.type === 'status' || c.type === 'priority')
-          ? { values: c.options }
-          : { bridge: activeFxRef },   // lets the grid insert cell refs on click while a formula is being typed
+        cellEditorParams: c.options ? { values: c.options } : undefined,
         // per-cell Excel formatting stored in row.data._fmt[key]
         cellStyle: p => {
           const f = p.data?.data?._fmt?.[c.key] || {}
@@ -460,28 +458,7 @@ function Workspace() {
     return () => { window.removeEventListener('click', close); window.removeEventListener('keydown', onKey) }
   }, [ctx])
 
-  // Excel point-and-click: while a formula is being typed in a cell, clicking
-  // another cell inserts its reference (e.g. C4) instead of ending the edit.
-  useEffect(() => {
-    const onDown = (e) => {
-      const bridge = activeFxRef.current
-      if (!bridge || !bridge.isArmed || !bridge.isArmed()) return
-      if (e.target.closest('.fe-inline') || e.target.closest('.fxbar')) return  // clicks in the editor / formula bar
-      const cellEl = e.target.closest('.ag-cell')
-      const rowEl = e.target.closest('.ag-row')
-      if (!cellEl || !rowEl) return
-      const colId = cellEl.getAttribute('col-id') || ''
-      const rowIndex = parseInt(rowEl.getAttribute('row-index'), 10)
-      if (!colId.startsWith('data.') || isNaN(rowIndex)) return
-      const key = colId.slice(5)
-      const colIdx = colsRef.current.findIndex(c => c.key === key)
-      if (colIdx < 0) return
-      e.preventDefault(); e.stopPropagation()   // keep the editor open, don't end the edit
-      bridge.insertRef(colLetter(colIdx) + (rowIndex + 1))
-    }
-    document.addEventListener('mousedown', onDown, true)
-    return () => document.removeEventListener('mousedown', onDown, true)
-  }, [])
+  // (Click-to-insert cell references is handled by the formula bar — see onCellClicked.)
 
   async function commitFx() {
     fxArmedRef.current = false
