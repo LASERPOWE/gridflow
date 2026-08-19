@@ -433,6 +433,7 @@ function Workspace() {
     const colIdx = field && field.startsWith('data.') ? colsRef.current.findIndex(c => c.key === field.slice(5)) : -1
     const ref = colIdx >= 0 ? colLetter(colIdx) + (e.rowIndex + 1) : null
     if (fxArmedRef.current && ref) { insertRefIntoFx(ref); return }
+    fxArmedRef.current = false   // just selecting a cell must NOT keep the formula bar armed
     if (!field || !field.startsWith('data.')) { setFx({ label: '', value: '', rowId: null, key: null }); return }
     const key = field.slice(5)
     const raw = e.data?.data?.[key]
