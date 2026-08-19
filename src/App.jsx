@@ -73,6 +73,8 @@ function GridHeader(props) {
       <span className="gf-hdr-label">{props.displayName}</span>
       {sort === 'asc' && <span className="gf-hdr-sort">▲</span>}
       {sort === 'desc' && <span className="gf-hdr-sort">▼</span>}
+      <button className="gf-hdr-refresh" title="Refresh this column (reload latest data)"
+        onClick={(e) => { e.stopPropagation(); props.onRefresh && props.onRefresh(props.colKey) }}>🔄</button>
     </div>
   )
 }
@@ -166,6 +168,7 @@ function Workspace() {
   const [favs, setFavs] = useState([])             // favorite sheet ids (per user, saved on this device)
   const toastId = useRef(0)
   const openColRef = useRef(null)             // latest openColDlg for the grid header
+  const refreshColRef = useRef(null)          // latest refreshColumn for the grid header
   const activeFxRef = useRef(null)            // active in-cell formula editor bridge (for click-to-insert refs)
   const gridRef = useRef()
   const fxInputRef = useRef(null)     // formula bar <input>
@@ -230,6 +233,21 @@ function Workspace() {
     setColDlg({ id: t.id, key: t.key, label: t.label, type: t.type || 'text', options: (t.options || []).slice() })
   }
   openColRef.current = openColDlg
+
+  // Refresh a single column: pull the latest rows from the database and
+  // re-render (and re-evaluate any formulas) for that column.
+  async function refreshColumn(colKey) {
+    if (!sheet) return
+    const { data } = await supabase.from('rows').select('*').eq('sheet_id', sheet.id)
+      .order('created_at', { ascending: true }).order('id', { ascending: true }).limit(20000)
+    setRows(data || [])
+    const field = 'data.' + colKey
+    setTimeout(() => { try { gridRef.current?.api?.refreshCells({ columns: [field], force: true }) } catch { /* noop */ } }, 0)
+    const lbl = colsRef.current.find(c => c.key === colKey)?.label || 'Column'
+    toast(`🔄 ${lbl} refreshed`)
+  }
+  refreshColRef.current = refreshColumn
+
   async function saveColDlg() {
     const d = colDlg; if (!d) return
     const patch = { label: (d.label || '').trim() || d.label, type: d.type, options: d.type === 'select' ? d.options : null }
@@ -322,8 +340,10 @@ function Workspace() {
     if (isWO) {
       defs.push(
         { headerName: 'Status', field: 'status', width: 130, cellRenderer: PillRenderer, cellClass: 'col-blue2',
+          filter: false, suppressHeaderMenuButton: true, suppressHeaderFilterButton: true,
           editable: canWrite, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['open','assigned','in_progress','on_hold','resolved','closed','reopened'] } },
         { headerName: 'Priority', field: 'priority', width: 120, cellRenderer: PillRenderer, cellClass: 'col-blue2',
+          filter: false, suppressHeaderMenuButton: true, suppressHeaderFilterButton: true,
           editable: canWrite, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['low','medium','high','critical'] } },
       )
     }
@@ -336,7 +356,7 @@ function Workspace() {
         editable: canWrite && c.type !== 'checkbox', minWidth: 110, flex: 1, cellClass: cc,
         pinned: (frozen && idx === 0) ? 'left' : undefined,
         headerComponent: GridHeader,
-        headerComponentParams: { colKey: c.key, onRename: (k) => openColRef.current && openColRef.current(k) },
+        headerComponentParams: { colKey: c.key, onRename: (k) => openColRef.current && openColRef.current(k), onRefresh: (k) => refreshColRef.current && refreshColRef.current(k) },
         wrapText: wrap, autoHeight: wrap,
         cellRenderer:
           c.type === 'checkbox'
