@@ -601,3 +601,14 @@ html,body{overflow-x:hidden}
 .shortcuts>div:last-child{border-bottom:none}
 .sc-keys{min-width:150px;display:flex;gap:4px;align-items:center;flex-wrap:wrap}
 kbd{background:var(--panel);border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:2px 6px;font-size:11px;font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--text)}
+
+/* ---- in-cell formula editor + autocomplete ---- */
+.fe-wrap{position:relative;background:var(--bg);border:2px solid var(--ss-blue);border-radius:4px;box-shadow:0 6px 20px rgba(16,30,60,.18);min-width:230px}
+.fe-input{width:100%;border:none;outline:none;padding:6px 9px;font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace;background:transparent;color:var(--text)}
+.fe-ac{position:absolute;top:calc(100% + 2px);left:-2px;z-index:80;background:var(--bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 12px 30px rgba(16,30,60,.24);min-width:300px;max-height:260px;overflow:auto;padding:4px}
+.fe-ac-head{font-size:10.5px;color:var(--muted);padding:5px 9px 6px;text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+.fe-ac-item{display:flex;gap:10px;align-items:baseline;width:100%;text-align:left;background:none;border:none;padding:7px 10px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text)}
+.fe-ac-item b{color:var(--ss-blue);min-width:92px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.fe-ac-item span{color:var(--muted);font-size:12px}
+.fe-ac-item.on,.fe-ac-item:hover{background:var(--hover)}
+[data-theme="dark"] .fe-ac-item.on,[data-theme="dark"] .fe-ac-item:hover{background:#2b3340}

@@ -16,6 +16,7 @@ import SearchModal from './components/SearchModal.jsx'
 import SimpleModal from './components/SimpleModal.jsx'
 import FindReplace from './components/FindReplace.jsx'
 import ShareModal from './components/ShareModal.jsx'
+import FormulaEditor, { FN_LIST } from './components/FormulaEditor.jsx'
 
 // smartsheet logo mark (reused)
 function Mark({ size = 20 }) {
@@ -115,49 +116,6 @@ function RuleAdder({ cols, onAdd }) {
     </div>
   )
 }
-
-// Formula functions for the autocomplete dropdown (name + short help).
-const FN_LIST = [
-  ['SUM', 'Add up numbers / a range'],
-  ['SUMIF', 'Add cells that match a condition'],
-  ['AVERAGE', 'Average of numbers'],
-  ['AVG', 'Average of numbers'],
-  ['AVERAGEIF', 'Average of cells matching a condition'],
-  ['MEDIAN', 'Middle value'],
-  ['MIN', 'Smallest number'],
-  ['MAX', 'Largest number'],
-  ['COUNT', 'Count numbers'],
-  ['COUNTA', 'Count non-empty cells'],
-  ['COUNTIF', 'Count cells that match a condition'],
-  ['PRODUCT', 'Multiply numbers'],
-  ['ROUND', 'Round to N decimals'],
-  ['ROUNDUP', 'Round up'],
-  ['ROUNDDOWN', 'Round down'],
-  ['INT', 'Integer part'],
-  ['ABS', 'Absolute value'],
-  ['SQRT', 'Square root'],
-  ['POWER', 'x to the power y'],
-  ['MOD', 'Remainder'],
-  ['IF', 'If condition then A else B'],
-  ['IFERROR', 'Value, or fallback on error'],
-  ['AND', 'True if all are true'],
-  ['OR', 'True if any is true'],
-  ['NOT', 'Invert true/false'],
-  ['CONCAT', 'Join text together'],
-  ['CONCATENATE', 'Join text together'],
-  ['LEN', 'Length of text'],
-  ['LEFT', 'Left N characters'],
-  ['RIGHT', 'Right N characters'],
-  ['MID', 'Middle characters'],
-  ['UPPER', 'UPPERCASE text'],
-  ['LOWER', 'lowercase text'],
-  ['TRIM', 'Remove extra spaces'],
-  ['LOOKUP', 'Look up a value in a row/column'],
-  ['VLOOKUP', 'Look up down a table by first column'],
-  ['HLOOKUP', 'Look up across a table by first row'],
-  ['INDEX', 'Value at row/col in a range'],
-  ['MATCH', 'Position of a value in a range'],
-]
 
 function Workspace() {
   const { profile, role, signOut, canWrite, isApprover, isApprover: isAdmin } = useAuth()
@@ -375,7 +333,9 @@ function Workspace() {
           return raw
         },
         cellEditor: (c.type === 'select' || c.type === 'status' || c.type === 'priority') ? 'agSelectCellEditor'
-          : c.type === 'date' ? 'agDateStringCellEditor' : undefined,
+          : c.type === 'date' ? 'agDateStringCellEditor'
+          : FormulaEditor,   // type = in any cell -> in-cell function dropdown, result in the same cell
+        cellEditorPopup: !(c.type === 'select' || c.type === 'status' || c.type === 'priority' || c.type === 'date'),
         cellEditorParams: c.options ? { values: c.options } : undefined,
         // per-cell Excel formatting stored in row.data._fmt[key]
         cellStyle: p => {
@@ -465,18 +425,17 @@ function Workspace() {
 
   // Formula bar: reflect the clicked cell — OR, while building a formula,
   // clicking a cell inserts its reference (Excel-style point & click).
+  // Clicking a cell just reflects it in the formula bar (no point-and-click ref
+  // insertion — formulas are typed directly in the cell now).
   const onCellClicked = useCallback((e) => {
     const field = e.colDef.field
     const colIdx = field && field.startsWith('data.') ? colsRef.current.findIndex(c => c.key === field.slice(5)) : -1
     const ref = colIdx >= 0 ? colLetter(colIdx) + (e.rowIndex + 1) : null
-
-    if (fxArmedRef.current && fx.rowId && ref) { insertRefIntoFx(ref); return }
-
     if (!field || !field.startsWith('data.')) { setFx({ label: '', value: '', rowId: null, key: null }); return }
     const key = field.slice(5)
     const raw = e.data?.data?.[key]
     setFx({ label: ref || '?', value: raw == null ? '' : String(raw), rowId: e.data.id || null, key })
-  }, [fx.rowId])
+  }, [])
 
   // Right-click a cell -> our own context menu (Excel-style).
   const onCellContextMenu = useCallback((e) => {
@@ -975,9 +934,9 @@ function Workspace() {
             <span className="fxsym">ƒx</span>
             <div className="fx-acwrap">
               <input ref={fxInputRef} className="fxinput" value={fx.value} disabled={!canWrite || !fx.rowId}
-                placeholder={fx.rowId ? 'Type =SUM… for suggestions, then click cells to add refs' : 'Click a cell to edit…'}
-                onChange={e => { const v = e.target.value; fxCursorRef.current = e.target.selectionStart; fxArmedRef.current = v.trim().startsWith('='); setFx(f => ({ ...f, value: v })); updateFnAc(v, e.target.selectionStart) }}
-                onFocus={e => { fxCursorRef.current = e.target.selectionStart; fxArmedRef.current = (fx.value || '').trim().startsWith('=') }}
+                placeholder={fx.rowId ? 'Edit here, or type = for function suggestions' : 'Click a cell to edit…'}
+                onChange={e => { const v = e.target.value; fxCursorRef.current = e.target.selectionStart; setFx(f => ({ ...f, value: v })); updateFnAc(v, e.target.selectionStart) }}
+                onFocus={e => { fxCursorRef.current = e.target.selectionStart }}
                 onSelect={e => { fxCursorRef.current = e.target.selectionStart }}
                 onKeyUp={e => { fxCursorRef.current = e.target.selectionStart; if (!['Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'Escape'].includes(e.key)) updateFnAc(e.target.value, e.target.selectionStart) }}
                 onClick={e => { fxCursorRef.current = e.target.selectionStart }}
@@ -989,9 +948,8 @@ function Workspace() {
                     if (e.key === 'Escape') { e.preventDefault(); setFnAc(null); return }
                   }
                   if (e.key === 'Enter') { e.preventDefault(); commitFx() }
-                  else if (e.key === 'Escape') { fxArmedRef.current = false; e.target.blur() }
-                }}
-                onBlur={() => { if (fxArmedRef.current) setTimeout(() => { if (fxArmedRef.current) fxInputRef.current?.focus() }, 0) }} />
+                  else if (e.key === 'Escape') { e.target.blur() }
+                }} />
               {fnAc && (
                 <div className="fx-ac">
                   {fnAc.items.map((f, i) => (
@@ -1004,7 +962,7 @@ function Workspace() {
                 </div>
               )}
             </div>
-            {(fx.value || '').trim().startsWith('=') && <span className="fxhint">↑↓ pick · Tab/Enter insert · click cells for refs</span>}
+            {(fx.value || '').trim().startsWith('=') && <span className="fxhint">↑↓ pick · Tab/Enter insert · Enter to apply</span>}
           </div>
         )}
 
