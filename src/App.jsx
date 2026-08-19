@@ -81,8 +81,8 @@ function GridHeader(props) {
       <span className="gf-hdr-label">{props.displayName}</span>
       {sort === 'asc' && <span className="gf-hdr-sort">▲</span>}
       {sort === 'desc' && <span className="gf-hdr-sort">▼</span>}
-      <button className="gf-hdr-refresh" title="Refresh this column (reload latest data)"
-        onClick={(e) => { e.stopPropagation(); props.onRefresh && props.onRefresh(props.colKey) }}>🔄</button>
+      {props.onRefresh && <button className="gf-hdr-refresh" title="Refresh this column (reload latest data)"
+        onClick={(e) => { e.stopPropagation(); props.onRefresh(props.colKey) }}>🔄</button>}
     </div>
   )
 }
@@ -265,8 +265,9 @@ function Workspace() {
 
   // Refresh a single column: pull the latest rows from the database and
   // re-render (and re-evaluate any formulas) for that column. Timed + logged.
+  // Only admins may refresh.
   async function refreshColumn(colKey) {
-    if (!sheet) return
+    if (!sheet || !isAdmin) return
     const t0 = Date.now()
     const { data } = await supabase.from('rows').select('*').eq('sheet_id', sheet.id)
       .order('created_at', { ascending: true }).order('id', { ascending: true }).limit(20000)
@@ -398,7 +399,7 @@ function Workspace() {
         editable: canWrite && c.type !== 'checkbox', minWidth: 110, flex: 1, cellClass: cc,
         pinned: (frozen && idx === 0) ? 'left' : undefined,
         headerComponent: GridHeader,
-        headerComponentParams: { colKey: c.key, onRename: (k) => openColRef.current && openColRef.current(k), onRefresh: (k) => refreshColRef.current && refreshColRef.current(k) },
+        headerComponentParams: { colKey: c.key, onRename: (k) => openColRef.current && openColRef.current(k), onRefresh: isAdmin ? ((k) => refreshColRef.current && refreshColRef.current(k)) : undefined },
         wrapText: wrap, autoHeight: wrap,
         cellRenderer:
           c.type === 'checkbox'
@@ -451,7 +452,7 @@ function Workspace() {
     // Placed AFTER all data columns so it sits at the end of the row.
     defs.push({ headerName: 'Uploaded', valueGetter: p => p.data?.created_at, valueFormatter: p => fmtDateTime(p.value), width: 160, cellClass: 'col-ts', editable: false, sortable: true, filter: false })
     return defs
-  }, [cols, isWO, canWrite, frozen, resolveCell, rules, wrap])
+  }, [cols, isWO, canWrite, frozen, resolveCell, rules, wrap, isAdmin])
 
   const defaultColDef = useMemo(() => ({ sortable: true, resizable: true, filter: true, minWidth: 110 }), [])
 
