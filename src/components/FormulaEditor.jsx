@@ -57,7 +57,17 @@ const FormulaEditor = forwardRef((props, ref) => {
   const inputRef = useRef(null)
   const valueRef = useRef(value); valueRef.current = value
 
-  useImperativeHandle(ref, () => ({ getValue: () => valueRef.current }))
+  // getValue: what AG Grid stores. focusIn: AG Grid calls this to move focus into
+  // the editor synchronously when editing starts — so keystrokes never get lost.
+  useImperativeHandle(ref, () => ({
+    getValue: () => valueRef.current,
+    focusIn: () => {
+      const el = inputRef.current; if (!el) return
+      el.focus()
+      const n = el.value.length; try { el.setSelectionRange(n, n) } catch { /* noop */ }
+      updateAc(el.value, el.value.length)
+    },
+  }))
 
   function computePos() {
     const el = inputRef.current; if (!el) return null
@@ -125,7 +135,7 @@ const FormulaEditor = forwardRef((props, ref) => {
 
   return (
     <div className="fe-inline">
-      <input ref={inputRef} className="fe-input2" value={value}
+      <input ref={inputRef} className="fe-input2" value={value} autoFocus
         onChange={e => { setValue(e.target.value); updateAc(e.target.value, e.target.selectionStart) }}
         onKeyDown={onKeyDown}
         onKeyUp={e => { if (!['Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'Escape'].includes(e.key)) updateAc(e.target.value, e.target.selectionStart) }} />
