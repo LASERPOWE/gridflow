@@ -58,6 +58,64 @@ function fmtPercent(n) { const x = parseFloat(n); return isNaN(x) ? n : x + '%' 
 function fmtDate(v) { if (v === '' || v == null) return v; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }
 const isChecked = (v) => v === true || v === 'true' || v === 1 || v === '1' || v === 'TRUE'
 
+// Custom grid header: single-click sorts, double-click opens the column editor
+// (rename / set type / dropdown options).
+function GridHeader(props) {
+  const sort = props.column?.getSort?.()
+  return (
+    <div className="gf-hdr" title="Double-click to rename or change type"
+      onClick={() => props.progressSort && props.progressSort()}
+      onDoubleClick={() => props.onRename && props.onRename(props.colKey)}>
+      <span className="gf-hdr-label">{props.displayName}</span>
+      {sort === 'asc' && <span className="gf-hdr-sort">▲</span>}
+      {sort === 'desc' && <span className="gf-hdr-sort">▼</span>}
+    </div>
+  )
+}
+
+// Evaluate a conditional-colour rule against a cell value.
+function ruleMatches(op, cellVal, target) {
+  const s = cellVal == null ? '' : String(cellVal)
+  const t = target == null ? '' : String(target)
+  const n = parseFloat(s), tn = parseFloat(t)
+  switch (op) {
+    case 'eq': return s.toLowerCase() === t.toLowerCase()
+    case 'ne': return s.toLowerCase() !== t.toLowerCase()
+    case 'contains': return s.toLowerCase().includes(t.toLowerCase())
+    case 'empty': return s.trim() === ''
+    case 'gt': return !isNaN(n) && !isNaN(tn) && n > tn
+    case 'lt': return !isNaN(n) && !isNaN(tn) && n < tn
+    default: return false
+  }
+}
+const OP_LABEL = { contains: 'contains', eq: '=', ne: '≠', gt: '>', lt: '<', empty: 'is empty' }
+
+// Small form to add a conditional-colour rule.
+function RuleAdder({ cols, onAdd }) {
+  const [colKey, setColKey] = useState(cols[0]?.key || '')
+  const [op, setOp] = useState('contains')
+  const [value, setValue] = useState('')
+  const [bg, setBg] = useState('#ffdede')
+  return (
+    <div className="rule-add">
+      <select className="fr-in" value={colKey} onChange={e => setColKey(e.target.value)}>
+        {cols.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+      </select>
+      <select className="fr-in" value={op} onChange={e => setOp(e.target.value)}>
+        <option value="contains">contains</option>
+        <option value="eq">equals</option>
+        <option value="ne">not equals</option>
+        <option value="gt">greater than</option>
+        <option value="lt">less than</option>
+        <option value="empty">is empty</option>
+      </select>
+      {op !== 'empty' && <input className="fr-in" placeholder="value" value={value} onChange={e => setValue(e.target.value)} />}
+      <label className="rule-color" title="Fill colour">🎨<input type="color" value={bg} onChange={e => setBg(e.target.value)} /></label>
+      <button className="btn sm" onClick={() => { if (!colKey) return; onAdd({ colKey, op, value, bg }); setValue('') }}>Add</button>
+    </div>
+  )
+}
+
 // Formula functions for the autocomplete dropdown (name + short help).
 const FN_LIST = [
   ['SUM', 'Add up numbers / a range'],
@@ -133,6 +191,17 @@ function Workspace() {
   const [nameDlg, setNameDlg] = useState(null) // new-sheet / rename dialog { mode, value, sheet? }
   const [showShare, setShowShare] = useState(false) // share-sheet dialog
   const [fnAc, setFnAc] = useState(null)      // formula autocomplete: { items:[[name,desc]], active }
+  const [theme, setTheme] = useState(() => { try { return localStorage.getItem('gf_theme') || 'light' } catch { return 'light' } })
+  const [toasts, setToasts] = useState([])    // transient action feedback
+  const [saved, setSaved] = useState('idle')  // 'idle' | 'saving' | 'saved'
+  const [ctx, setCtx] = useState(null)        // right-click context menu { x, y }
+  const [colDlg, setColDlg] = useState(null)  // column editor { id, key, label, type, options }
+  const [showHelp, setShowHelp] = useState(false) // keyboard shortcuts panel
+  const [wrap, setWrap] = useState(false)     // wrap text in cells
+  const [rules, setRules] = useState([])      // conditional colour rules for current sheet
+  const [rulesDlg, setRulesDlg] = useState(false)
+  const toastId = useRef(0)
+  const openColRef = useRef(null)             // latest openColDlg for the grid header
   const gridRef = useRef()
   const fxInputRef = useRef(null)     // formula bar <input>
   const fxArmedRef = useRef(false)    // true while building a formula (click cells to insert refs)
@@ -159,6 +228,60 @@ function Workspace() {
     setBusyLabel(label || ''); setBusy(true)
     window.clearTimeout(flash._t)
     flash._t = window.setTimeout(() => setBusy(false), ms)
+  }
+
+  // Transient toast notification (auto-dismisses).
+  function toast(msg, type = 'ok') {
+    const id = ++toastId.current
+    setToasts(t => [...t, { id, msg, type }])
+    window.setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2600)
+  }
+  // "Saved ✓" pill flashes after a successful write.
+  function markSaved() {
+    setSaved('saved')
+    window.clearTimeout(markSaved._t)
+    markSaved._t = window.setTimeout(() => setSaved('idle'), 1600)
+  }
+
+  // Apply and persist the theme (light / dark).
+  useEffect(() => {
+    try { document.documentElement.setAttribute('data-theme', theme); localStorage.setItem('gf_theme', theme) } catch { /* noop */ }
+  }, [theme])
+
+  // Load per-sheet conditional colour rules (stored locally, no schema change).
+  useEffect(() => {
+    if (!sheet) { setRules([]); return }
+    try { setRules(JSON.parse(localStorage.getItem('gf_rules_' + sheet.id) || '[]')) } catch { setRules([]) }
+  }, [sheet?.id]) // eslint-disable-line
+  function saveRules(next) {
+    setRules(next)
+    try { if (sheet) localStorage.setItem('gf_rules_' + sheet.id, JSON.stringify(next)) } catch { /* noop */ }
+    gridRef.current?.api.refreshCells({ force: true })
+  }
+
+  // Column editor: rename, change type, edit dropdown options.
+  function openColDlg(colKey) {
+    const t = colsRef.current.find(c => c.key === colKey); if (!t) return
+    setColDlg({ id: t.id, key: t.key, label: t.label, type: t.type || 'text', options: (t.options || []).slice() })
+  }
+  openColRef.current = openColDlg
+  async function saveColDlg() {
+    const d = colDlg; if (!d) return
+    const patch = { label: (d.label || '').trim() || d.label, type: d.type, options: d.type === 'select' ? d.options : null }
+    setColDlg(null)
+    const { error } = await supabase.from('sheet_columns').update(patch).eq('id', d.id)
+    if (error) return toast(error.message, 'err')
+    toast('Column updated ✓'); selectSheet(sheet)
+  }
+
+  // Copy the focused cell's value to the clipboard.
+  async function copyCell() {
+    setCtx(null)
+    const c = focusedCell(); if (!c) return
+    const node = gApi()?.getDisplayedRowAtIndex(c.rowIndex)
+    const id = c.column.getColId(); const key = id.startsWith('data.') ? id.slice(5) : id
+    const val = node?.data?.data?.[key] ?? node?.data?.[key] ?? ''
+    try { await navigator.clipboard.writeText(String(val)); toast('Copied') } catch { toast('Copy failed', 'err') }
   }
   // Views that don't have a real screen yet -> coming-soon modal.
   const COMING_SOON = { resource: 'Resource Management', workapps: 'WorkApps', apps: 'Apps', help: 'Help' }
@@ -229,6 +352,9 @@ function Workspace() {
         valueSetter: p => { if (!p.data.data) p.data.data = {}; p.data.data[c.key] = p.newValue; return true },
         editable: canWrite && c.type !== 'checkbox', minWidth: 110, flex: 1, cellClass: cc,
         pinned: (frozen && idx === 0) ? 'left' : undefined,
+        headerComponent: GridHeader,
+        headerComponentParams: { colKey: c.key, onRename: (k) => openColRef.current && openColRef.current(k) },
+        wrapText: wrap, autoHeight: wrap,
         cellRenderer:
           c.type === 'checkbox'
             ? (p) => {
@@ -253,8 +379,8 @@ function Workspace() {
         cellEditorParams: c.options ? { values: c.options } : undefined,
         // per-cell Excel formatting stored in row.data._fmt[key]
         cellStyle: p => {
-          const f = p.data?.data?._fmt?.[c.key]; if (!f) return null
-          return {
+          const f = p.data?.data?._fmt?.[c.key] || {}
+          const st = {
             fontWeight: f.b ? '700' : undefined,
             fontStyle: f.i ? 'italic' : undefined,
             textDecoration: f.u ? 'underline' : undefined,
@@ -263,11 +389,20 @@ function Workspace() {
             textAlign: f.align || undefined,
             border: f.bd ? '1px solid #64748b' : undefined,
           }
+          // conditional colour rules (only when the cell has no manual fill/colour)
+          for (const rule of rules) {
+            if (rule.colKey !== c.key) continue
+            if (ruleMatches(rule.op, p.value, rule.value)) {
+              if (rule.bg && !f.bg) st.backgroundColor = rule.bg
+              if (rule.color && !f.color) st.color = rule.color
+            }
+          }
+          return st
         },
       })
     })
     return defs
-  }, [cols, isWO, canWrite, frozen, resolveCell])
+  }, [cols, isWO, canWrite, frozen, resolveCell, rules, wrap])
 
   const defaultColDef = useMemo(() => ({ sortable: true, resizable: true, filter: true, minWidth: 110 }), [])
 
@@ -302,7 +437,7 @@ function Workspace() {
       : e.colDef.field === 'priority' ? { priority: e.newValue }
       : { data: e.data.data }
     const { error } = await supabase.from('rows').update(patch).eq('id', e.data.id)
-    if (error) setErr(error.message)
+    if (error) { setErr(error.message); toast(error.message, 'err') } else { markSaved() }
     // recompute any formulas that depend on the changed cell
     e.api.refreshCells({ force: true })
     // keep the formula bar in sync with the edited cell
@@ -342,6 +477,25 @@ function Workspace() {
     const raw = e.data?.data?.[key]
     setFx({ label: ref || '?', value: raw == null ? '' : String(raw), rowId: e.data.id || null, key })
   }, [fx.rowId])
+
+  // Right-click a cell -> our own context menu (Excel-style).
+  const onCellContextMenu = useCallback((e) => {
+    if (!canWrite) return
+    if (e.event) e.event.preventDefault()
+    try { if (e.rowIndex != null && e.column) e.api.setFocusedCell(e.rowIndex, e.column.getColId()) } catch { /* noop */ }
+    const ev = e.event
+    if (ev) setCtx({ x: ev.clientX, y: ev.clientY })
+  }, [canWrite])
+
+  // Close the context menu on any outside click / Escape.
+  useEffect(() => {
+    if (!ctx) return
+    const close = () => setCtx(null)
+    const onKey = (e) => { if (e.key === 'Escape') setCtx(null) }
+    window.addEventListener('click', close)
+    window.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('click', close); window.removeEventListener('keydown', onKey) }
+  }, [ctx])
 
   async function commitFx() {
     fxArmedRef.current = false
@@ -515,11 +669,19 @@ function Workspace() {
     setTimeout(() => { undoingRef.current = false }, 0)
   }
 
-  // keyboard: Ctrl/Cmd+Z = undo, Ctrl/Cmd+H = find & replace
+  // keyboard shortcuts
   useEffect(() => {
     const h = (e) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); doUndo() }
-      else if ((e.ctrlKey || e.metaKey) && (e.key === 'h' || e.key === 'H')) { e.preventDefault(); setShowFR(true) }
+      const mod = e.ctrlKey || e.metaKey
+      if (!mod) { if (e.key === 'F1') { e.preventDefault(); setShowHelp(true) } return }
+      const k = (e.key || '').toLowerCase()
+      if (k === 'z') { e.preventDefault(); doUndo() }
+      else if (k === 'h') { e.preventDefault(); setShowFR(true) }
+      else if (k === 'f') { e.preventDefault(); const el = document.getElementById('gf-search'); if (el) { el.focus(); el.select?.() } }
+      else if (k === 's') { e.preventDefault(); toast('Changes save automatically ✓') }
+      else if (k === 'b') { e.preventDefault(); applyFormat('b') }
+      else if (k === 'i') { e.preventDefault(); applyFormat('i') }
+      else if (k === 'u') { e.preventDefault(); applyFormat('u') }
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
@@ -609,7 +771,8 @@ function Workspace() {
     else if (kind === 'align') f.align = (f.align === value ? '' : value)
     else f[kind] = !f[kind]            // b / i / u / bd toggles
     row.data._fmt[key] = f
-    await supabase.from('rows').update({ data: row.data }).eq('id', row.id)
+    if (row.id) { const { error } = await supabase.from('rows').update({ data: row.data }).eq('id', row.id); if (error) toast(error.message, 'err'); else markSaved() }
+    else toast('Type a value in the cell first', 'err')
     api.refreshCells({ rowNodes: [node], force: true })
   }
 
@@ -719,6 +882,8 @@ function Workspace() {
             <Mark size={16} />
             {sheet ? sheet.name : 'smartsheet'}
           </span>
+          <button className="mi mi-round" title="Keyboard shortcuts (F1)" onClick={() => setShowHelp(true)}>?</button>
+          <button className="mi mi-round" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? '☀' : '🌙'}</button>
           <button className="topmenu-search" onClick={openSearch} title="Search (sheets)">🔍 Search…</button>
           <div className="topmenu-avatar-wrap">
             <button className="topmenu-avatar" onClick={() => setShowProfile(v => !v)} title={profile?.full_name || profile?.email}>{initials}</button>
@@ -789,6 +954,8 @@ function Workspace() {
           </div>
           <button className="tbtn" title="Find & Replace (Ctrl+H)" onClick={() => setShowFR(true)}>🔎 Find/Replace</button>
           <button className="tbtn icon" title="Undo (Ctrl+Z)" onClick={doUndo}>↶</button>
+          <button className={'tbtn icon' + (wrap ? ' on' : '')} title="Wrap text in cells" onClick={() => setWrap(w => !w)}>↩</button>
+          <button className="tbtn" title="Conditional colour rules (e.g. overdue = red)" onClick={() => setRulesDlg(true)}>🎯 Rules</button>
           <span className="sep" />
           <button className="tbtn" title="Download as CSV" onClick={exportCsv}>⬇ CSV</button>
           {sheet && <button className="tbtn primary" title="Share this sheet by email" onClick={() => setShowShare(true)}>🔗 Share</button>}</>}
@@ -797,6 +964,7 @@ function Workspace() {
           {sheet && !canWrite && <button className="tbtn" onClick={() => setShowReq(true)}>🔒 Request access</button>}
           <span className="spacer" />
           <input id="gf-search" className="search" placeholder="🔍 Search…" value={quick} onChange={e => setQuickFilter(e.target.value)} />
+          {saved === 'saved' && <span className="saved-pill">Saved ✓</span>}
           <span className="count">{rows.length} rows</span>
         </div>
 
@@ -842,15 +1010,29 @@ function Workspace() {
 
         {err && <div className="err" style={{ padding: '6px 12px' }}>{err}</div>}
 
-        <div className="grid-wrap ag-theme-quartz" onPaste={handlePaste}>
+        <div className={'grid-wrap ' + (theme === 'dark' ? 'ag-theme-quartz-dark' : 'ag-theme-quartz')} onPaste={handlePaste}>
           {sheet ? (
             <AgGridReact ref={gridRef} rowData={displayRows} columnDefs={colDefs} defaultColDef={defaultColDef}
               getRowId={getRowId}
               onCellValueChanged={onCellValueChanged} onCellClicked={onCellClicked}
+              onCellContextMenu={onCellContextMenu}
               enterNavigatesVertically enterNavigatesVerticallyAfterEdit
               rowBuffer={20} enableCellTextSelection stopEditingWhenCellsLoseFocus />
+          ) : loading ? (
+            <div className="skel-wrap">
+              {Array.from({ length: 8 }).map((_, i) => <div key={i} className="skel skel-row" />)}
+            </div>
           ) : (
-            <div className="empty">{loading ? 'Loading…' : 'Select a sheet on the left, or Import from Smartsheet.'}</div>
+            <div className="onboard">
+              <div className="onboard-mark"><Mark size={40} /></div>
+              <h2>Welcome to smartsheet by Laser Power</h2>
+              <p>Pick a sheet on the left to open it — or start something new.</p>
+              <div className="onboard-actions">
+                {canWrite && <button className="btn" onClick={newSheet}>＋ New sheet</button>}
+                <button className="btn ghost" onClick={() => setShowImport(true)}>⬇ Import from Smartsheet</button>
+              </div>
+              <button className="onboard-help" onClick={() => setShowHelp(true)}>⌨ See keyboard shortcuts</button>
+            </div>
           )}
         </div>
       </div>
@@ -936,6 +1118,101 @@ function Workspace() {
             <p style={{ marginTop: 12, color: '#69707d', fontSize: 12.5 }}>
               More settings (password, theme, notifications) coming soon.
             </p>
+          </div>
+        </SimpleModal>
+      )}
+
+      {/* right-click context menu */}
+      {ctx && (
+        <div className="ctx-menu" style={{ left: ctx.x, top: ctx.y }} onClick={e => e.stopPropagation()}>
+          <button onClick={copyCell}>📋 Copy</button>
+          <div className="ctx-sep" />
+          <button onClick={() => { setCtx(null); insertRow('above') }}>⬆ Insert row above</button>
+          <button onClick={() => { setCtx(null); insertRow('below') }}>⬇ Insert row below</button>
+          <button onClick={() => { setCtx(null); deleteFocusedRow() }}>🗑 Delete row</button>
+          <div className="ctx-sep" />
+          <button onClick={() => { setCtx(null); insertCol('left') }}>⬅ Insert column left</button>
+          <button onClick={() => { setCtx(null); insertCol('right') }}>➡ Insert column right</button>
+          <button onClick={() => { setCtx(null); deleteFocusedColumn() }}>🗑 Delete column</button>
+          <div className="ctx-sep" />
+          <button onClick={() => { setCtx(null); applyFormat('b') }}><b>B</b>&nbsp; Bold</button>
+          <button onClick={() => { setCtx(null); applyFormat('i') }}><i>I</i>&nbsp; Italic</button>
+          <button onClick={() => { setCtx(null); applyFormat('u') }}><u>U</u>&nbsp; Underline</button>
+        </div>
+      )}
+
+      {/* toasts */}
+      <div className="toast-wrap">
+        {toasts.map(t => <div key={t.id} className={'toast ' + (t.type === 'err' ? 'toast-err' : 'toast-ok')}>{t.msg}</div>)}
+      </div>
+
+      {/* column editor: rename / type / dropdown options */}
+      {colDlg && (
+        <SimpleModal title="Edit column" onClose={() => setColDlg(null)}>
+          <label>Column name</label>
+          <input className="fr-in" style={{ width: '100%' }} autoFocus value={colDlg.label}
+            onChange={e => setColDlg(d => ({ ...d, label: e.target.value }))} />
+          <label style={{ marginTop: 10 }}>Type</label>
+          <select className="fr-in" style={{ width: '100%' }} value={colDlg.type}
+            onChange={e => setColDlg(d => ({ ...d, type: e.target.value }))}>
+            <option value="text">Text</option>
+            <option value="number">Number (1,234)</option>
+            <option value="currency">Currency (₹)</option>
+            <option value="percent">Percent (%)</option>
+            <option value="date">Date</option>
+            <option value="checkbox">Checkbox</option>
+            <option value="select">Dropdown</option>
+          </select>
+          {colDlg.type === 'select' && (
+            <div style={{ marginTop: 10 }}>
+              <label>Dropdown options</label>
+              <div className="chips">
+                {colDlg.options.map((o, i) => (
+                  <span key={i} className="chip">{o}<button onClick={() => setColDlg(d => ({ ...d, options: d.options.filter((_, j) => j !== i) }))}>×</button></span>
+                ))}
+                {colDlg.options.length === 0 && <span className="chips-empty">No options yet</span>}
+              </div>
+              <input className="fr-in" style={{ width: '100%', marginTop: 6 }} placeholder="Type an option, press Enter to add"
+                onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) { const v = e.target.value.trim(); setColDlg(d => ({ ...d, options: [...d.options, v] })); e.target.value = '' } }} />
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+            <button className="btn ghost" onClick={() => setColDlg(null)}>Cancel</button>
+            <button className="btn" onClick={saveColDlg}>Save</button>
+          </div>
+        </SimpleModal>
+      )}
+
+      {/* conditional colour rules */}
+      {rulesDlg && (
+        <SimpleModal title="Conditional colour rules" onClose={() => setRulesDlg(false)}>
+          <p className="dlg-note">Colour cells automatically when they match a condition — e.g. Status contains "overdue" → red.</p>
+          {rules.length === 0 && <div className="dlg-empty">No rules yet.</div>}
+          {rules.map((r, i) => (
+            <div key={i} className="rule-row">
+              <span className="rule-chip" style={{ background: r.bg || undefined, color: r.color || undefined }}>
+                {(cols.find(c => c.key === r.colKey)?.label || r.colKey)} {OP_LABEL[r.op] || r.op} {r.op !== 'empty' ? r.value : ''}
+              </span>
+              <button className="share-x" onClick={() => saveRules(rules.filter((_, j) => j !== i))}>Remove</button>
+            </div>
+          ))}
+          <RuleAdder cols={cols} onAdd={(r) => saveRules([...rules, r])} />
+        </SimpleModal>
+      )}
+
+      {/* keyboard shortcuts help */}
+      {showHelp && (
+        <SimpleModal title="Keyboard shortcuts & tips" onClose={() => setShowHelp(false)}>
+          <div className="shortcuts">
+            <div><span className="sc-keys"><kbd>Ctrl</kbd>+<kbd>Z</kbd></span><span>Undo</span></div>
+            <div><span className="sc-keys"><kbd>Ctrl</kbd>+<kbd>B</kbd>/<kbd>I</kbd>/<kbd>U</kbd></span><span>Bold / Italic / Underline</span></div>
+            <div><span className="sc-keys"><kbd>Ctrl</kbd>+<kbd>F</kbd></span><span>Search this sheet</span></div>
+            <div><span className="sc-keys"><kbd>Ctrl</kbd>+<kbd>H</kbd></span><span>Find &amp; Replace</span></div>
+            <div><span className="sc-keys"><kbd>Enter</kbd></span><span>Move down / commit a formula</span></div>
+            <div><span className="sc-keys"><kbd>Right-click</kbd></span><span>Cell menu — insert, delete, format</span></div>
+            <div><span className="sc-keys"><kbd>Double-click</kbd></span><span>Column header → rename &amp; set type</span></div>
+            <div><span className="sc-keys"><kbd>=</kbd></span><span>Start a formula (SUM, IF, VLOOKUP…)</span></div>
+            <div><span className="sc-keys"><kbd>F1</kbd></span><span>Open this help</span></div>
           </div>
         </SimpleModal>
       )}
