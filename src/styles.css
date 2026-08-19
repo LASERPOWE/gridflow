@@ -83,7 +83,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--ss-blue);border-
 .topmenu .out:hover{background:rgba(255,255,255,.28)}
 
 /* grid toolbar (bold italic colors filter) */
-.toolbar{display:flex;align-items:center;gap:4px;padding:6px 12px;border-bottom:1px solid var(--border);background:#fff;flex-wrap:wrap;flex-shrink:0}
+.toolbar{display:flex;align-items:center;gap:3px;padding:6px 12px;border-bottom:1px solid var(--border);background:#fff;flex-wrap:nowrap;flex-shrink:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
+.toolbar::-webkit-scrollbar{height:6px}
+.toolbar::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
+.toolbar .search{flex:0 0 auto}
+.toolbar .sep{flex:0 0 auto}
+.toolbar .tbtn{flex:0 0 auto;white-space:nowrap}
 .toolbar .title{font-weight:700;font-size:14px;margin-right:8px}
 .toolbar .sep{width:1px;height:20px;background:var(--border);margin:0 4px}
 .tbtn{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border:1px solid transparent;border-radius:5px;background:none;cursor:pointer;font-size:12.5px;color:var(--text)}
@@ -422,6 +427,12 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:0 0 0 3px rgba(4
 .sheet-row:hover .sheet-actions{display:flex}
 .sheet-actions button{border:none;background:none;cursor:pointer;font-size:12px;opacity:.6;padding:2px 4px;border-radius:5px}
 .sheet-actions button:hover{opacity:1;background:rgba(47,91,214,.12)}
+/* favorite star — always visible; gold when starred */
+.fav-star{border:none;background:none;cursor:pointer;font-size:14px;line-height:1;padding:2px 5px;border-radius:5px;color:#c3cad6;opacity:.55;transition:all .12s;flex:0 0 auto}
+.sheet-row:hover .fav-star{opacity:1}
+.fav-star:hover{background:rgba(245,179,1,.16)}
+.fav-star.on{color:#f5b301;opacity:1}
+.tree-hint{padding:8px 14px 12px;font-size:12px;color:var(--muted,#8a91a0);line-height:1.5}
 
 /* ============================================================
    Mobile / responsive

@@ -163,6 +163,7 @@ function Workspace() {
   const [rulesDlg, setRulesDlg] = useState(false)
   const [formView, setFormView] = useState(true)   // open in the entry-form view by default; switch to table via button
   const [viewAs, setViewAs] = useState('editor')   // admin only: 'editor' = full controls, 'user' = preview what a user sees (form only)
+  const [favs, setFavs] = useState([])             // favorite sheet ids (per user, saved on this device)
   const toastId = useRef(0)
   const openColRef = useRef(null)             // latest openColDlg for the grid header
   const activeFxRef = useRef(null)            // active in-cell formula editor bridge (for click-to-insert refs)
@@ -255,6 +256,20 @@ function Workspace() {
     if (v === view) return
     flash(v.charAt(0).toUpperCase() + v.slice(1))
     setView(v)
+  }
+
+  // Favorites: load this user's starred sheets, and toggle/save them.
+  useEffect(() => {
+    if (!profile?.id) return
+    try { setFavs(JSON.parse(localStorage.getItem('gf_favs_' + profile.id) || '[]')) } catch { setFavs([]) }
+  }, [profile?.id])
+  function toggleFav(id) {
+    setFavs(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+      if (profile?.id) { try { localStorage.setItem('gf_favs_' + profile.id, JSON.stringify(next)) } catch { /* noop */ } }
+      toast(prev.includes(id) ? 'Removed from Favorites' : 'Added to Favorites ⭐')
+      return next
+    })
   }
 
   async function loadTree(selectId) {
@@ -813,29 +828,41 @@ function Workspace() {
             )}
           </div>
         )}
-        {tree.map(o => {
-          // Flat list: show the workspace name, then all its sheets directly
-          // (folder/department groupings are hidden — only sheets are listed).
-          const sheets = o.depts.flatMap(d => d.wss.flatMap(w => w.sheets))
+        {(() => {
+          // One flat list of every sheet (folder groupings hidden).
+          const flat = tree.flatMap(o => o.depts.flatMap(d => d.wss.flatMap(w => w.sheets)))
+          const wsName = tree[0]?.name || 'Sheets'
+          // The Favorites / Recents rail views filter this same list.
+          let list = flat, header = wsName, headIcon = '🏢'
+          if (view === 'favorites') { list = flat.filter(s => favs.includes(s.id)); header = 'Favorites'; headIcon = '⭐' }
+          else if (view === 'recents') { list = recents.filter(Boolean); header = 'Recents'; headIcon = '🕘' }
           return (
-            <div key={o.id}>
-              <div className="node ws"><span className="ico">🏢</span>{o.name}</div>
-              {sheets.map(s => (
-                <div key={s.id} className={'sheet-row' + (sheet && sheet.id === s.id ? ' active' : '')}>
-                  <button className="node sheet" onClick={() => { setFormView(true); selectSheet(s) }}>
-                    <span className="ico">▦</span>{s.name}
-                  </button>
-                  {canWrite && (
-                    <span className="sheet-actions">
-                      <button title="Rename" onClick={() => renameSheet(s)}>✎</button>
-                      <button title="Delete" onClick={() => setConfirmDel(s)}>🗑</button>
-                    </span>
-                  )}
-                </div>
-              ))}
+            <div>
+              <div className="node ws"><span className="ico">{headIcon}</span>{header}</div>
+              {list.length === 0 && view === 'favorites' && (
+                <div className="tree-hint">No favorites yet. Tap the ☆ on any sheet to add it here.</div>
+              )}
+              {list.map(s => {
+                const isFav = favs.includes(s.id)
+                return (
+                  <div key={s.id} className={'sheet-row' + (sheet && sheet.id === s.id ? ' active' : '')}>
+                    <button className="node sheet" onClick={() => { setFormView(true); selectSheet(s) }}>
+                      <span className="ico">▦</span>{s.name}
+                    </button>
+                    <button className={'fav-star' + (isFav ? ' on' : '')} title={isFav ? 'Remove from Favorites' : 'Add to Favorites'}
+                      onClick={(e) => { e.stopPropagation(); toggleFav(s.id) }}>{isFav ? '★' : '☆'}</button>
+                    {canWrite && (
+                      <span className="sheet-actions">
+                        <button title="Rename" onClick={() => renameSheet(s)}>✎</button>
+                        <button title="Delete" onClick={() => setConfirmDel(s)}>🗑</button>
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )
-        })}
+        })()}
         <div className="spacer" />
         <div className="userbox"><div className="name">{profile?.full_name || profile?.email}</div><div className="role">{role.replace(/_/g, ' ')}</div></div>
       </div>
@@ -938,7 +965,7 @@ function Workspace() {
           <button className="tbtn" title="Download as CSV" onClick={exportCsv}>⬇ CSV</button>
           {sheet && <button className="tbtn primary" title="Share this sheet by email" onClick={() => setShowShare(true)}>🔗 Share</button>}</>}
           {isAdmin && !showForm && <><span className="sep" />
-          <button className="tbtn" onClick={() => setShowImport(true)}>⬇ Import from Smartsheet</button></>}
+          <button className="tbtn" title="Import from Smartsheet" onClick={() => setShowImport(true)}>⬇ Import</button></>}
           {sheet && !canWrite && <button className="tbtn" onClick={() => setShowReq(true)}>🔒 Request access</button>}
           <span className="spacer" />
           <input id="gf-search" className="search" placeholder="🔍 Search…" value={quick} onChange={e => setQuickFilter(e.target.value)} />
