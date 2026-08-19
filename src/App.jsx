@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AgGridReact } from 'ag-grid-react'
 import { AuthProvider, useAuth } from './lib/auth.jsx'
 import { supabase } from './lib/supabase'
@@ -83,6 +84,29 @@ function GridHeader(props) {
       {sort === 'desc' && <span className="gf-hdr-sort">▼</span>}
       {props.onRefresh && <button className="gf-hdr-refresh" title="Refresh this column (reload latest data)"
         onClick={(e) => { e.stopPropagation(); props.onRefresh(props.colKey) }}>🔄</button>}
+    </div>
+  )
+}
+
+// Toolbar dropdown whose menu renders in a body portal, so it is never clipped
+// by the horizontally-scrolling toolbar's overflow.
+function TbDrop({ label, title, open, onToggle, children }) {
+  const btnRef = useRef(null)
+  const [pos, setPos] = useState(null)
+  useEffect(() => {
+    if (!open) return
+    const place = () => { const el = btnRef.current; if (el) { const r = el.getBoundingClientRect(); setPos({ left: r.left, top: r.bottom + 4 }) } }
+    place()
+    window.addEventListener('resize', place)
+    return () => window.removeEventListener('resize', place)
+  }, [open])
+  return (
+    <div className="tb-drop">
+      <button ref={btnRef} className="tbtn" title={title} onClick={onToggle}>{label}</button>
+      {open && pos && createPortal(
+        <div className="tb-menu tb-menu-fixed" style={{ position: 'fixed', left: pos.left, top: pos.top, zIndex: 9999 }}>
+          {children}
+        </div>, document.body)}
     </div>
   )
 }
@@ -551,6 +575,16 @@ function Workspace() {
     return () => { window.removeEventListener('click', close); window.removeEventListener('keydown', onKey) }
   }, [ctx])
 
+  // Close toolbar dropdowns (Insert / Delete / Type) on outside click / Escape.
+  useEffect(() => {
+    if (!menu) return
+    const onDown = (e) => { if (!e.target.closest('.tb-drop') && !e.target.closest('.tb-menu')) setMenu(null) }
+    const onKey = (e) => { if (e.key === 'Escape') setMenu(null) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [menu])
+
   // (Click-to-insert cell references is handled by the formula bar — see onCellClicked.)
 
   async function commitFx() {
@@ -991,42 +1025,27 @@ function Workspace() {
           <button className={'tbtn icon' + (frozen ? ' on' : '')} title="Freeze first column" onClick={() => setFrozen(f => !f)}>❄</button>
           <span className="sep" />
           {/* Insert menu */}
-          <div className="tb-drop">
-            <button className="tbtn" onClick={() => setMenu(m => m === 'insert' ? null : 'insert')}>➕ Insert ▾</button>
-            {menu === 'insert' && (
-              <div className="tb-menu">
-                <button onClick={() => insertRow('above')}>Row above</button>
-                <button onClick={() => insertRow('below')}>Row below</button>
-                <button onClick={() => insertCol('left')}>Column left</button>
-                <button onClick={() => insertCol('right')}>Column right</button>
-              </div>
-            )}
-          </div>
+          <TbDrop label="➕ Insert ▾" open={menu === 'insert'} onToggle={() => setMenu(m => m === 'insert' ? null : 'insert')}>
+            <button onClick={() => insertRow('above')}>Row above</button>
+            <button onClick={() => insertRow('below')}>Row below</button>
+            <button onClick={() => insertCol('left')}>Column left</button>
+            <button onClick={() => insertCol('right')}>Column right</button>
+          </TbDrop>
           {/* Delete menu */}
-          <div className="tb-drop">
-            <button className="tbtn" onClick={() => setMenu(m => m === 'delete' ? null : 'delete')}>🗑 Delete ▾</button>
-            {menu === 'delete' && (
-              <div className="tb-menu">
-                <button onClick={deleteFocusedRow}>Delete row</button>
-                <button onClick={deleteFocusedColumn}>Delete column</button>
-              </div>
-            )}
-          </div>
+          <TbDrop label="🗑 Delete ▾" open={menu === 'delete'} onToggle={() => setMenu(m => m === 'delete' ? null : 'delete')}>
+            <button onClick={deleteFocusedRow}>Delete row</button>
+            <button onClick={deleteFocusedColumn}>Delete column</button>
+          </TbDrop>
           {/* Format / cell type menu */}
-          <div className="tb-drop">
-            <button className="tbtn" onClick={() => setMenu(m => m === 'format' ? null : 'format')}>🔠 Type ▾</button>
-            {menu === 'format' && (
-              <div className="tb-menu">
-                <button onClick={() => setColumnType('text')}>Text</button>
-                <button onClick={() => setColumnType('number')}>Number (1,234)</button>
-                <button onClick={() => setColumnType('currency')}>Currency (₹)</button>
-                <button onClick={() => setColumnType('percent')}>Percent (%)</button>
-                <button onClick={() => setColumnType('date')}>Date</button>
-                <button onClick={() => setColumnType('checkbox')}>Checkbox ☑</button>
-                <button onClick={() => setColumnType('select')}>Dropdown…</button>
-              </div>
-            )}
-          </div>
+          <TbDrop label="🔠 Type ▾" open={menu === 'format'} onToggle={() => setMenu(m => m === 'format' ? null : 'format')}>
+            <button onClick={() => setColumnType('text')}>Text</button>
+            <button onClick={() => setColumnType('number')}>Number (1,234)</button>
+            <button onClick={() => setColumnType('currency')}>Currency (₹)</button>
+            <button onClick={() => setColumnType('percent')}>Percent (%)</button>
+            <button onClick={() => setColumnType('date')}>Date</button>
+            <button onClick={() => setColumnType('checkbox')}>Checkbox ☑</button>
+            <button onClick={() => setColumnType('select')}>Dropdown…</button>
+          </TbDrop>
           <button className="tbtn" title="Find & Replace (Ctrl+H)" onClick={() => setShowFR(true)}>🔎 Find/Replace</button>
           <button className="tbtn icon" title="Undo (Ctrl+Z)" onClick={doUndo}>↶</button>
           <button className={'tbtn icon' + (wrap ? ' on' : '')} title="Wrap text in cells" onClick={() => setWrap(w => !w)}>↩</button>
