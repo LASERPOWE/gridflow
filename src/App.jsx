@@ -162,6 +162,7 @@ function Workspace() {
   const [rules, setRules] = useState([])      // conditional colour rules for current sheet
   const [rulesDlg, setRulesDlg] = useState(false)
   const [formView, setFormView] = useState(true)   // open in the entry-form view by default; switch to table via button
+  const [viewAs, setViewAs] = useState('editor')   // admin only: 'editor' = full controls, 'user' = preview what a user sees (form only)
   const toastId = useRef(0)
   const openColRef = useRef(null)             // latest openColDlg for the grid header
   const activeFxRef = useRef(null)            // active in-cell formula editor bridge (for click-to-insert refs)
@@ -782,8 +783,10 @@ function Workspace() {
 
   const setQuickFilter = (v) => { setQuick(v); gridRef.current?.api.setGridOption('quickFilterText', v) }
 
-  // Non-admins only ever see the entry form; admins can toggle table <-> form.
-  const showForm = !!sheet && (!isAdmin || formView)
+  // Non-admins only ever see the entry form. Admins can toggle table <-> form,
+  // and can also switch to "User view" to preview exactly what a user sees (form only).
+  const asUser = isAdmin && viewAs === 'user'
+  const showForm = !!sheet && (!isAdmin || asUser || formView)
 
   return (
     <div className={'shell' + (view === 'admin' ? ' admin-mode' : '') + (treeCollapsed && view !== 'admin' ? ' tree-collapsed' : '')}>
@@ -868,9 +871,17 @@ function Workspace() {
 
         {/* grid toolbar */}
         <div className="toolbar">
-          {isAdmin && sheet && <button className={'tbtn' + (formView ? ' primary' : '')} title="Switch between table and form-entry view" onClick={() => setFormView(f => !f)}>{formView ? '▦ Table view' : '📝 Form view'}</button>}
-          {isAdmin && sheet && !formView && <button className="tbtn" title="Reload the latest entries" onClick={() => { selectSheet(sheet); toast('Refreshed ✓') }}>🔄 Refresh</button>}
-          {isAdmin && sheet && !formView && <span className="sep" />}
+          {/* admin-only: switch between the full editing view and a preview of what a user sees */}
+          {isAdmin && (
+            <div className="viewas" role="tablist" title="Switch between the full editor and the user's view">
+              <button className={'viewas-tab' + (!asUser ? ' on' : '')} onClick={() => setViewAs('editor')}>🛠️ Editor view</button>
+              <button className={'viewas-tab' + (asUser ? ' on' : '')} onClick={() => setViewAs('user')}>👤 User view</button>
+            </div>
+          )}
+          {isAdmin && <span className="sep" />}
+          {isAdmin && !asUser && sheet && <button className={'tbtn' + (formView ? ' primary' : '')} title="Switch between table and form-entry view" onClick={() => setFormView(f => !f)}>{formView ? '▦ Table view' : '📝 Form view'}</button>}
+          {isAdmin && !asUser && sheet && !formView && <button className="tbtn" title="Reload the latest entries" onClick={() => { selectSheet(sheet); toast('Refreshed ✓') }}>🔄 Refresh</button>}
+          {isAdmin && !asUser && sheet && !formView && <span className="sep" />}
           {canWrite && !showForm && <button className="tbtn primary" onClick={addRow}>+ New row</button>}
           {canWrite && !showForm && <button className="tbtn" onClick={addColumn}>▥ Add column</button>}
           {canWrite && !showForm && <><span className="sep" />

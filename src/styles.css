@@ -92,6 +92,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--ss-blue);border-
 .tbtn.primary:hover{background:var(--ss-blue-dark)}
 .tbtn.icon{font-weight:700;min-width:30px;justify-content:center}
 .tbtn.on{background:var(--ss-blue);color:#fff;border-color:var(--ss-blue)}
+/* admin User/Editor view segmented control */
+.viewas{display:inline-flex;background:var(--panel,#eef2f8);border:1px solid var(--border);border-radius:9px;padding:3px;gap:3px}
+.viewas-tab{border:none;background:none;cursor:pointer;padding:5px 12px;border-radius:6px;font-size:12.5px;font-weight:600;color:var(--muted,#5b6b82);display:inline-flex;align-items:center;gap:5px;transition:all .15s}
+.viewas-tab:hover{color:var(--text)}
+.viewas-tab.on{background:#fff;color:var(--ss-blue,#2f5bd6);box-shadow:0 1px 3px rgba(16,30,60,.12)}
 .tb-drop{position:relative;display:inline-flex}
 .tb-menu{position:absolute;top:calc(100% + 4px);left:0;z-index:60;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(16,30,60,.16);padding:5px;min-width:150px;display:flex;flex-direction:column}
 .tb-menu button{text-align:left;background:none;border:none;padding:8px 12px;border-radius:6px;font-size:13px;color:var(--text);cursor:pointer}
