@@ -970,7 +970,6 @@ function Workspace() {
           {sheet && <button className="tbtn primary" title="Share this sheet by email" onClick={() => setShowShare(true)}>🔗 Share</button>}</>}
           {isAdmin && !showForm && <><span className="sep" />
           <button className="tbtn" title="Import from Smartsheet" onClick={() => setShowImport(true)}>⬇ Import</button></>}
-          {sheet && !canWrite && <button className="tbtn" onClick={() => setShowReq(true)}>🔒 Request access</button>}
           <span className="spacer" />
           <input id="gf-search" className="search" placeholder="🔍 Search…" value={quick} onChange={e => setQuickFilter(e.target.value)} />
           {saved === 'saved' && <span className="saved-pill">Saved ✓</span>}
