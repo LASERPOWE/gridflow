@@ -433,15 +433,21 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:0 0 0 3px rgba(4
 .fav-star:hover{background:rgba(245,179,1,.16)}
 .fav-star.on{color:#f5b301;opacity:1}
 .tree-hint{padding:8px 14px 12px;font-size:12px;color:var(--muted,#8a91a0);line-height:1.5}
-/* Excel-style grid lines toggle — every cell gets right + bottom borders so
-   both vertical and horizontal lines are drawn across the whole grid. */
-.grid-lines .ag-cell{border-right:1px solid #c3ccda;border-bottom:1px solid #c3ccda}
-.grid-lines .ag-header-cell,.grid-lines .ag-header-group-cell{border-right:1px solid #c3ccda;border-bottom:1px solid #c3ccda}
-.grid-lines .ag-row{border-bottom:1px solid #c3ccda}
-.grid-lines .ag-header{border-bottom:1px solid #c3ccda}
+/* Excel-style grid lines toggle. Vertical lines between columns come from AG
+   Grid's own cell-border variable (a plain border-right on .ag-cell doesn't
+   render in the body); horizontal lines come from the row border + a fallback. */
+.grid-lines{--ag-cell-horizontal-border:1px solid #c3ccda;
+  --ag-row-border-color:#c3ccda; --ag-row-border-width:1px; --ag-row-border-style:solid;
+  --ag-header-column-separator-display:block; --ag-header-column-separator-color:#c3ccda; --ag-header-column-separator-width:1px;
+  --ag-borders:solid 1px; --ag-border-color:#c3ccda}
+.grid-lines .ag-cell{border-right:1px solid #c3ccda}
+.grid-lines .ag-header-cell,.grid-lines .ag-header-group-cell{border-right:1px solid #c3ccda}
+.grid-lines.ag-theme-quartz-dark{--ag-cell-horizontal-border:1px solid #3a4a63;
+  --ag-row-border-color:#3a4a63; --ag-header-column-separator-color:#3a4a63; --ag-border-color:#3a4a63}
 .grid-lines.ag-theme-quartz-dark .ag-cell,.grid-lines.ag-theme-quartz-dark .ag-header-cell,
-.grid-lines.ag-theme-quartz-dark .ag-header-group-cell,.grid-lines.ag-theme-quartz-dark .ag-row,
-.grid-lines.ag-theme-quartz-dark .ag-header{border-color:#3a4a63}
+.grid-lines.ag-theme-quartz-dark .ag-header-group-cell{border-right-color:#3a4a63}
+/* Grid off — no vertical column borders */
+.grid-off{--ag-cell-horizontal-border:none; --ag-header-column-separator-display:none}
 /* Grid off — clean, no lines */
 .grid-off .ag-cell,.grid-off .ag-header-cell,.grid-off .ag-header-group-cell{border-right:none}
 .grid-off .ag-row{border-bottom:none;border-top:none}
