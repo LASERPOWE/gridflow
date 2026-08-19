@@ -813,34 +813,29 @@ function Workspace() {
             )}
           </div>
         )}
-        {tree.map(o => (
-          <div key={o.id}>
-            <div className="node ws"><span className="ico">🏢</span>{o.name}</div>
-            {o.depts.map(d => (
-              <div key={d.id}>
-                <div className="node folder"><span className="ico">📁</span>{d.name}</div>
-                {d.wss.map(w => (
-                  <div key={w.id}>
-                    <div className="node folder" style={{ paddingLeft: 30 }}><span className="ico">📂</span>{w.name}</div>
-                    {w.sheets.map(s => (
-                      <div key={s.id} className={'sheet-row' + (sheet && sheet.id === s.id ? ' active' : '')}>
-                        <button className="node sheet" onClick={() => { setFormView(true); selectSheet(s) }}>
-                          <span className="ico">▦</span>{s.name}
-                        </button>
-                        {canWrite && (
-                          <span className="sheet-actions">
-                            <button title="Rename" onClick={() => renameSheet(s)}>✎</button>
-                            <button title="Delete" onClick={() => setConfirmDel(s)}>🗑</button>
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        ))}
+        {tree.map(o => {
+          // Flat list: show the workspace name, then all its sheets directly
+          // (folder/department groupings are hidden — only sheets are listed).
+          const sheets = o.depts.flatMap(d => d.wss.flatMap(w => w.sheets))
+          return (
+            <div key={o.id}>
+              <div className="node ws"><span className="ico">🏢</span>{o.name}</div>
+              {sheets.map(s => (
+                <div key={s.id} className={'sheet-row' + (sheet && sheet.id === s.id ? ' active' : '')}>
+                  <button className="node sheet" onClick={() => { setFormView(true); selectSheet(s) }}>
+                    <span className="ico">▦</span>{s.name}
+                  </button>
+                  {canWrite && (
+                    <span className="sheet-actions">
+                      <button title="Rename" onClick={() => renameSheet(s)}>✎</button>
+                      <button title="Delete" onClick={() => setConfirmDel(s)}>🗑</button>
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        })}
         <div className="spacer" />
         <div className="userbox"><div className="name">{profile?.full_name || profile?.email}</div><div className="role">{role.replace(/_/g, ' ')}</div></div>
       </div>
