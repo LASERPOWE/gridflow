@@ -433,6 +433,15 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:0 0 0 3px rgba(4
 .fav-star:hover{background:rgba(245,179,1,.16)}
 .fav-star.on{color:#f5b301;opacity:1}
 .tree-hint{padding:8px 14px 12px;font-size:12px;color:var(--muted,#8a91a0);line-height:1.5}
+/* Excel-style grid lines toggle */
+.grid-lines .ag-cell{border-right:1px solid #d5dbe6}
+.grid-lines .ag-header-cell,.grid-lines .ag-header-group-cell{border-right:1px solid #d5dbe6}
+.grid-lines .ag-row{border-bottom:1px solid #d5dbe6}
+.grid-lines.ag-theme-quartz-dark .ag-cell,.grid-lines.ag-theme-quartz-dark .ag-header-cell,
+.grid-lines.ag-theme-quartz-dark .ag-header-group-cell,.grid-lines.ag-theme-quartz-dark .ag-row{border-color:#33415c}
+/* Grid off — clean, no lines */
+.grid-off .ag-cell,.grid-off .ag-header-cell,.grid-off .ag-header-group-cell{border-right:none}
+.grid-off .ag-row{border-bottom:none;border-top:none}
 .rlog-wrap{max-height:52vh;overflow:auto;border:1px solid var(--border);border-radius:8px}
 .rlog-table{width:100%;font-size:13px}
 .rlog-table th{position:sticky;top:0;background:var(--panel,#f2f5fb);z-index:1}

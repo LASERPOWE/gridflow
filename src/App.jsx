@@ -193,6 +193,7 @@ function Workspace() {
   const [colDlg, setColDlg] = useState(null)  // column editor { id, key, label, type, options }
   const [showHelp, setShowHelp] = useState(false) // keyboard shortcuts panel
   const [wrap, setWrap] = useState(false)     // wrap text in cells
+  const [gridLines, setGridLines] = useState(() => { try { return localStorage.getItem('gf_gridlines') !== 'off' } catch { return true } })  // Excel-style cell borders (on by default)
   const [rules, setRules] = useState([])      // conditional colour rules for current sheet
   const [rulesDlg, setRulesDlg] = useState(false)
   const [formView, setFormView] = useState(true)   // open in the entry-form view by default; switch to table via button
@@ -1002,6 +1003,7 @@ function Workspace() {
           {isAdmin && !asUser && sheet && <button className={'tbtn' + (formView ? ' primary' : '')} title="Switch between table and form-entry view" onClick={() => setFormView(f => !f)}>{formView ? '▦ Table view' : '📝 Form view'}</button>}
           {isAdmin && !asUser && sheet && !formView && <button className="tbtn" title="Reload the latest entries" onClick={refreshSheet}>🔄 Refresh</button>}
           {isAdmin && !asUser && sheet && !formView && <button className="tbtn" title="See who refreshed, when, and how long it took" onClick={() => { setShowRefreshLog(true); loadRefreshLogs() }}>📋 Refresh log</button>}
+          {sheet && !showForm && <button className={'tbtn' + (gridLines ? ' on' : '')} title="Show / hide Excel-style grid lines" onClick={() => setGridLines(g => { const nv = !g; try { localStorage.setItem('gf_gridlines', nv ? 'on' : 'off') } catch { /* noop */ } return nv })}>▦ Grid: {gridLines ? 'On' : 'Off'}</button>}
           {isAdmin && !asUser && sheet && !formView && <span className="sep" />}
           {canWrite && !showForm && <button className="tbtn primary" onClick={addRow}>+ New row</button>}
           {canWrite && !showForm && <button className="tbtn" onClick={addColumn}>▥ Add column</button>}
@@ -1102,7 +1104,7 @@ function Workspace() {
 
         {err && <div className="err" style={{ padding: '6px 12px' }}>{err}</div>}
 
-        <div className={'grid-wrap' + (showForm ? '' : (theme === 'dark' ? ' ag-theme-quartz-dark' : ' ag-theme-quartz'))} onPaste={handlePaste}>
+        <div className={'grid-wrap' + (showForm ? '' : (theme === 'dark' ? ' ag-theme-quartz-dark' : ' ag-theme-quartz')) + (gridLines ? ' grid-lines' : ' grid-off')} onPaste={handlePaste}>
           {showForm ? (
             <FormEntry sheet={sheet} cols={cols} onSubmitted={() => { selectSheet(sheet); toast('Entry added ✓') }} />
           ) : sheet ? (
