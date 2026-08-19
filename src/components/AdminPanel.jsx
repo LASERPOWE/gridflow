@@ -6,6 +6,7 @@ const SUPER_ADMIN_EMAIL = 'samrat.dey@laserpowerinfra.com'
 
 export default function AdminPanel() {
   const { profile } = useAuth()
+  const isSuper = profile?.email === SUPER_ADMIN_EMAIL   // only the Super Admin may remove users
   const [tab, setTab] = useState('users')   // users | access | allowlist | requests | migrate
   const [users, setUsers] = useState([])
   const [allow, setAllow] = useState([])
@@ -50,7 +51,9 @@ export default function AdminPanel() {
   }
 
   // Remove a user entirely: revoke all their sheet access, then delete the profile.
+  // Only the Super Admin is allowed to do this.
   async function removeUser(u) {
+    if (!isSuper) { setMsg('Only the Super Admin can remove users.'); setConfirmUser(null); return }
     if (u.email === SUPER_ADMIN_EMAIL) { setMsg('Super Admin is locked.'); setConfirmUser(null); return }
     setBusy(true)
     await supabase.from('sheet_access').delete().eq('user_id', u.id)
@@ -135,7 +138,7 @@ export default function AdminPanel() {
                       </select>
                     )}</td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      {locked ? <span className="admin-empty">—</span> : (
+                      {(!isSuper || locked) ? <span className="admin-empty">—</span> : (
                         confirmUser === u.id ? (
                           <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                             <button className="admin-del" disabled={busy} onClick={() => removeUser(u)}>Confirm remove</button>
