@@ -845,11 +845,6 @@ function Workspace() {
         {/* top menu bar */}
         <div className="topmenu">
           <button className="mi mi-toggle" title={treeCollapsed ? 'Show sheets' : 'Hide sheets (full view)'} onClick={() => setTreeCollapsed(c => !c)}>{treeCollapsed ? '▸' : '☰'}</button>
-          <button className="mi">File</button>
-          <button className="mi">Automation</button>
-          <button className="mi">Forms</button>
-          <button className="mi">Connections</button>
-          <button className="mi">Dynamic View</button>
           <span className="doc">
             <Mark size={16} />
             {sheet ? sheet.name : 'smartsheet'}
