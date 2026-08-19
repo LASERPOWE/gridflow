@@ -166,6 +166,8 @@ function Workspace() {
   const [formView, setFormView] = useState(true)   // open in the entry-form view by default; switch to table via button
   const [viewAs, setViewAs] = useState('editor')   // admin only: 'editor' = full controls, 'user' = preview what a user sees (form only)
   const [favs, setFavs] = useState([])             // favorite sheet ids (per user, saved on this device)
+  const [showRefreshLog, setShowRefreshLog] = useState(false)  // refresh-history modal
+  const [refreshLogs, setRefreshLogs] = useState([])           // rows from refresh_logs
   const toastId = useRef(0)
   const openColRef = useRef(null)             // latest openColDlg for the grid header
   const refreshColRef = useRef(null)          // latest refreshColumn for the grid header
@@ -234,19 +236,51 @@ function Workspace() {
   }
   openColRef.current = openColDlg
 
+  // Record a refresh in the audit log (who, when, how long). Best-effort.
+  async function logRefresh(scope, columnLabel, durationMs) {
+    try {
+      await supabase.from('refresh_logs').insert({
+        user_id: profile?.id || null,
+        user_name: profile?.full_name || null,
+        user_email: profile?.email || null,
+        sheet_id: sheet?.id || null,
+        sheet_name: sheet?.name || null,
+        scope, column_label: columnLabel || null,
+        duration_ms: Math.max(0, Math.round(durationMs)),
+      })
+    } catch { /* table may not exist yet — ignore */ }
+  }
+  async function loadRefreshLogs() {
+    const { data } = await supabase.from('refresh_logs').select('*').order('created_at', { ascending: false }).limit(300)
+    setRefreshLogs(data || [])
+  }
+
   // Refresh a single column: pull the latest rows from the database and
-  // re-render (and re-evaluate any formulas) for that column.
+  // re-render (and re-evaluate any formulas) for that column. Timed + logged.
   async function refreshColumn(colKey) {
     if (!sheet) return
+    const t0 = Date.now()
     const { data } = await supabase.from('rows').select('*').eq('sheet_id', sheet.id)
       .order('created_at', { ascending: true }).order('id', { ascending: true }).limit(20000)
     setRows(data || [])
+    const dur = Date.now() - t0
     const field = 'data.' + colKey
     setTimeout(() => { try { gridRef.current?.api?.refreshCells({ columns: [field], force: true }) } catch { /* noop */ } }, 0)
     const lbl = colsRef.current.find(c => c.key === colKey)?.label || 'Column'
-    toast(`🔄 ${lbl} refreshed`)
+    logRefresh('column', lbl, dur)
+    toast(`🔄 ${lbl} refreshed (${dur} ms)`)
   }
   refreshColRef.current = refreshColumn
+
+  // Whole-sheet refresh (toolbar Refresh button) — timed + logged.
+  async function refreshSheet() {
+    if (!sheet) return
+    const t0 = Date.now()
+    await selectSheet(sheet)
+    const dur = Date.now() - t0
+    logRefresh('sheet', null, dur)
+    toast(`Refreshed ✓ (${dur} ms)`)
+  }
 
   async function saveColDlg() {
     const d = colDlg; if (!d) return
@@ -921,7 +955,8 @@ function Workspace() {
           )}
           {isAdmin && <span className="sep" />}
           {isAdmin && !asUser && sheet && <button className={'tbtn' + (formView ? ' primary' : '')} title="Switch between table and form-entry view" onClick={() => setFormView(f => !f)}>{formView ? '▦ Table view' : '📝 Form view'}</button>}
-          {isAdmin && !asUser && sheet && !formView && <button className="tbtn" title="Reload the latest entries" onClick={() => { selectSheet(sheet); toast('Refreshed ✓') }}>🔄 Refresh</button>}
+          {isAdmin && !asUser && sheet && !formView && <button className="tbtn" title="Reload the latest entries" onClick={refreshSheet}>🔄 Refresh</button>}
+          {isAdmin && !asUser && sheet && !formView && <button className="tbtn" title="See who refreshed, when, and how long it took" onClick={() => { setShowRefreshLog(true); loadRefreshLogs() }}>📋 Refresh log</button>}
           {isAdmin && !asUser && sheet && !formView && <span className="sep" />}
           {canWrite && !showForm && <button className="tbtn primary" onClick={addRow}>+ New row</button>}
           {canWrite && !showForm && <button className="tbtn" onClick={addColumn}>▥ Add column</button>}
@@ -1208,6 +1243,34 @@ function Workspace() {
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
             <button className="btn ghost" onClick={() => setColDlg(null)}>Cancel</button>
             <button className="btn" onClick={saveColDlg}>Save</button>
+          </div>
+        </SimpleModal>
+      )}
+
+      {/* refresh log — who refreshed, when, how long */}
+      {showRefreshLog && (
+        <SimpleModal title="Refresh log" onClose={() => setShowRefreshLog(false)}>
+          <p className="dlg-note">Every refresh is recorded here — who did it, the date &amp; time, and how long it took.</p>
+          <div className="rlog-wrap">
+            <table className="admin-table rlog-table">
+              <thead><tr><th>Who</th><th>Date &amp; time</th><th>Sheet</th><th>What</th><th style={{ textAlign: 'right' }}>Time taken</th></tr></thead>
+              <tbody>
+                {refreshLogs.length === 0 && <tr><td colSpan={5} className="admin-empty">No refreshes recorded yet.</td></tr>}
+                {refreshLogs.map(r => (
+                  <tr key={r.id}>
+                    <td>{r.user_name || r.user_email || 'Someone'}</td>
+                    <td>{fmtDateTime(r.created_at)}</td>
+                    <td>{r.sheet_name || '—'}</td>
+                    <td>{r.scope === 'column' ? (r.column_label || 'Column') : 'Whole sheet'}</td>
+                    <td style={{ textAlign: 'right' }}>{r.duration_ms != null ? r.duration_ms + ' ms' : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
+            <button className="btn ghost" onClick={loadRefreshLogs}>↻ Reload</button>
+            <button className="btn" onClick={() => setShowRefreshLog(false)}>Close</button>
           </div>
         </SimpleModal>
       )}
