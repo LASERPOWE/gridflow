@@ -626,6 +626,13 @@ kbd{background:var(--panel);border:1px solid var(--border);border-bottom-width:2
 .fe2-field label{font-size:13.5px;font-weight:700;color:var(--text);margin:0}
 .fe2-field input[type=text],.fe2-field input[type=number],.fe2-field input[type=date],.fe2-field select{width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg);color:var(--text)}
 .fe2-field input[type=checkbox]{width:20px;height:20px}
+.fe2-inrow{display:flex;align-items:stretch;gap:8px}
+.fe2-inrow input,.fe2-inrow select{flex:1;min-width:0}
+.fe2-mic{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 13px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:15px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.fe2-mic:hover{background:#f1f5f9;border-color:#94a3b8}
+.fe2-mic.on{background:#fdecea;border-color:#e74c3c;color:#c0392b;font-size:12.5px;font-weight:700;animation:fe2pulse 1s ease-in-out infinite}
+@keyframes fe2pulse{0%,100%{opacity:1}50%{opacity:.55}}
+.fe2-mic:disabled{opacity:.5;cursor:default}
 .fe2-msg{margin:8px 0 4px;padding:10px 14px;border-radius:10px;background:#e7f6ec;color:#1a7f3f;font-size:13px;font-weight:600}
 .fe2-msg.err{background:#fdecea;color:#c0392b}
 .fe2-actions{display:flex;gap:10px;margin-top:20px}

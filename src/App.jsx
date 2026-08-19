@@ -161,7 +161,7 @@ function Workspace() {
   const [wrap, setWrap] = useState(false)     // wrap text in cells
   const [rules, setRules] = useState([])      // conditional colour rules for current sheet
   const [rulesDlg, setRulesDlg] = useState(false)
-  const [formView, setFormView] = useState(false)  // show the form-entry view instead of the table
+  const [formView, setFormView] = useState(true)   // open in the entry-form view by default; switch to table via button
   const toastId = useRef(0)
   const openColRef = useRef(null)             // latest openColDlg for the grid header
   const activeFxRef = useRef(null)            // active in-cell formula editor bridge (for click-to-insert refs)
@@ -299,8 +299,6 @@ function Workspace() {
 
   const colDefs = useMemo(() => {
     const defs = [{ headerName: '', valueGetter: p => p.node.rowIndex + 1, width: 46, pinned: 'left', cellClass: 'col-idx', sortable: false, filter: false }]
-    // "Uploaded" timestamp — when each entry was added (date + time).
-    defs.push({ headerName: 'Uploaded', valueGetter: p => p.data?.created_at, valueFormatter: p => fmtDateTime(p.value), width: 152, pinned: 'left', cellClass: 'col-ts', editable: false, sortable: true, filter: false })
     if (isWO) {
       defs.push(
         { headerName: 'Status', field: 'status', width: 130, cellRenderer: PillRenderer, cellClass: 'col-blue2',
@@ -367,6 +365,9 @@ function Workspace() {
         },
       })
     })
+    // "Uploaded" timestamp — when each entry was added (date + time).
+    // Placed AFTER all data columns so it sits at the end of the row.
+    defs.push({ headerName: 'Uploaded', valueGetter: p => p.data?.created_at, valueFormatter: p => fmtDateTime(p.value), width: 160, cellClass: 'col-ts', editable: false, sortable: true, filter: false })
     return defs
   }, [cols, isWO, canWrite, frozen, resolveCell, rules, wrap])
 
@@ -820,7 +821,7 @@ function Workspace() {
                     <div className="node folder" style={{ paddingLeft: 30 }}><span className="ico">📂</span>{w.name}</div>
                     {w.sheets.map(s => (
                       <div key={s.id} className={'sheet-row' + (sheet && sheet.id === s.id ? ' active' : '')}>
-                        <button className="node sheet" onClick={() => selectSheet(s)}>
+                        <button className="node sheet" onClick={() => { setFormView(true); selectSheet(s) }}>
                           <span className="ico">▦</span>{s.name}
                         </button>
                         {canWrite && (
@@ -1064,7 +1065,7 @@ function Workspace() {
       <Notifications open={showNotif} onClose={() => setShowNotif(false)} isApprover={isApprover} onCount={setNotifCount} />
 
       <SearchModal open={showSearch} onClose={() => setShowSearch(false)}
-        sheets={allSheets(tree)} recents={recents} onPick={(s) => { if (view === 'admin') setView('browse'); selectSheet(s) }} />
+        sheets={allSheets(tree)} recents={recents} onPick={(s) => { if (view === 'admin') setView('browse'); setFormView(true); selectSheet(s) }} />
 
       {confirmDel && (
         <SimpleModal title="Delete sheet?" onClose={() => setConfirmDel(null)}>
