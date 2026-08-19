@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root{
   --ss-blue:#2f5bd6; --ss-blue-dark:#1f47b8; --ss-green:#00a651;
@@ -6,7 +6,7 @@
   --rail:#5b5b5b; --tree-bg:#fafbfc; --hover:#eef3ff;
   --col-orange:#fde9d3; --col-yellow:#fff7c2; --col-blue:#dcecfb; --col-blue2:#eaf3fd;
   --radius:6px;
-  --font: Arial, 'Manrope', -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font: 'Inter', -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
 *{box-sizing:border-box}
 html,body,#root{height:100%;margin:0}
@@ -15,7 +15,7 @@ button{font-family:inherit}
 
 /* ---------- Auth ---------- */
 .auth-wrap{min-height:100vh;display:grid;place-items:center;background:linear-gradient(160deg,#2f5bd6 0%,#3b46c8 55%,#4a3fc0 100%);padding:24px}
-.auth-card{background:#fff;border-radius:14px;padding:34px;width:100%;max-width:400px;box-shadow:0 16px 50px rgba(0,0,0,.28);font-family:'Manrope',sans-serif}
+.auth-card{background:#fff;border-radius:14px;padding:34px;width:100%;max-width:400px;box-shadow:0 16px 50px rgba(0,0,0,.28);font-family:'Inter',sans-serif}
 .logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:22px;color:var(--ss-blue)}
 .logo .sq{width:22px;height:22px;border-radius:5px;background:var(--ss-blue);display:grid;grid-template-columns:1fr 1fr;gap:2px;padding:3px}
 .logo .sq i{background:#fff;border-radius:1px}
@@ -153,7 +153,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--ss-blue);border-
 
 /* modal */
 .modal-bg{position:fixed;inset:0;background:rgba(20,25,35,.5);display:grid;place-items:center;z-index:60;padding:20px}
-.modal{background:#fff;border-radius:10px;width:100%;max-width:560px;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);font-family:'Manrope',sans-serif}
+.modal{background:#fff;border-radius:10px;width:100%;max-width:560px;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);font-family:'Inter',sans-serif}
 .modal header{padding:15px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
 .modal header h3{margin:0;font-size:16px}
 .modal .body{padding:20px}
@@ -223,7 +223,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--ss-blue);border-
   position:fixed;inset:0;z-index:9998;display:flex;align-items:center;justify-content:center;
   background:radial-gradient(120% 120% at 30% 20%, #3b64e0 0%, #2f5bd6 42%, #3b46c8 74%, #4a3fc0 100%);
   opacity:0;visibility:hidden;transition:opacity .38s ease, visibility .38s ease;
-  font-family:'Manrope',sans-serif;
+  font-family:'Inter',sans-serif;
 }
 .ss-loader.on{opacity:1;visibility:visible}
 .ss-loader-inner{display:flex;flex-direction:column;align-items:center;transform:translateY(6px);opacity:0;transition:all .4s cubic-bezier(.2,.8,.2,1)}
