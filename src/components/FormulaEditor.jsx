@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 // Excel-style function list (name + short help) — shared with the formula bar.
 export const FN_LIST = [
@@ -43,31 +44,26 @@ export const FN_LIST = [
   ['MATCH', 'Position of a value in a range'],
 ]
 
-// Custom AG Grid cell editor: type into any cell; when the value starts with
-// "=", an Excel-style function dropdown appears right there. Press ↑/↓ to pick,
-// Enter/Tab to insert, and the computed result shows in the same cell.
+// Inline AG Grid cell editor. Type into any cell; when the value starts with
+// "=", an Excel-style function dropdown appears (rendered in a body portal so it
+// never gets clipped). ↑/↓ pick, Enter/Tab insert; Enter (no dropdown) applies
+// and the computed result shows in the same cell.
 const FormulaEditor = forwardRef((props, ref) => {
-  // If editing started by typing a printable char (e.g. "="), begin with it.
   const startChar = props.eventKey && props.eventKey.length === 1 ? props.eventKey : null
   const initial = startChar != null ? startChar : (props.value == null ? '' : String(props.value))
   const [value, setValue] = useState(initial)
   const [ac, setAc] = useState(null)          // { items, active }
+  const [pos, setPos] = useState(null)        // { left, top, width } for the portal dropdown
   const inputRef = useRef(null)
   const valueRef = useRef(value); valueRef.current = value
 
   useImperativeHandle(ref, () => ({ getValue: () => valueRef.current }))
 
-  useEffect(() => {
-    const t = setTimeout(() => {
-      const el = inputRef.current; if (!el) return
-      el.focus()
-      // place caret at the end (so "=" starts a fresh formula)
-      const n = el.value.length; try { el.setSelectionRange(n, n) } catch { /* noop */ }
-      if (startChar == null) el.select?.()
-      updateAc(el.value, el.value.length)
-    }, 0)
-    return () => clearTimeout(t)
-  }, []) // eslint-disable-line
+  function computePos() {
+    const el = inputRef.current; if (!el) return null
+    const r = el.getBoundingClientRect()
+    return { left: r.left, top: r.bottom + 2, width: Math.max(280, r.width) }
+  }
 
   function updateAc(v, caret) {
     if (!(v || '').trim().startsWith('=')) { setAc(null); return }
@@ -76,7 +72,35 @@ const FormulaEditor = forwardRef((props, ref) => {
     if (!m) { setAc(null); return }
     const token = m[1].toUpperCase()
     const items = FN_LIST.filter(f => f[0].startsWith(token)).slice(0, 8)
-    setAc(items.length ? { items, active: 0 } : null)
+    if (items.length) { setPos(computePos()); setAc({ items, active: 0 }) }
+    else setAc(null)
+  }
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const el = inputRef.current; if (!el) return
+      el.focus()
+      const n = el.value.length; try { el.setSelectionRange(n, n) } catch { /* noop */ }
+      if (startChar == null) el.select?.()
+      updateAc(el.value, el.value.length)
+    }, 0)
+    // register a bridge so the grid can insert cell references on click (if provided)
+    const b = props.bridge
+    if (b) b.current = { isArmed: () => (valueRef.current || '').trim().startsWith('='), insertRef }
+    return () => {
+      clearTimeout(t)
+      if (props.bridge && props.bridge.current && props.bridge.current.insertRef === insertRef) props.bridge.current = null
+    }
+  }, []) // eslint-disable-line
+
+  function insertRef(refStr) {
+    const el = inputRef.current
+    const caret = el ? el.selectionStart : valueRef.current.length
+    const v = valueRef.current
+    const nv = v.slice(0, caret) + refStr + v.slice(caret)
+    setValue(nv)
+    const p = caret + refStr.length
+    requestAnimationFrame(() => { if (el) { el.focus(); try { el.setSelectionRange(p, p) } catch { /* noop */ } } })
   }
 
   function accept(name) {
@@ -96,17 +120,17 @@ const FormulaEditor = forwardRef((props, ref) => {
       if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); accept(ac.items[ac.active][0]); return }
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAc(null); return }
     }
-    // otherwise let Enter/Escape bubble so AG Grid commits / cancels the edit
+    // otherwise let Enter/Escape bubble so AG Grid commits / cancels
   }
 
   return (
-    <div className="fe-wrap">
-      <input ref={inputRef} className="fe-input" value={value}
+    <div className="fe-inline">
+      <input ref={inputRef} className="fe-input2" value={value}
         onChange={e => { setValue(e.target.value); updateAc(e.target.value, e.target.selectionStart) }}
         onKeyDown={onKeyDown}
         onKeyUp={e => { if (!['Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'Escape'].includes(e.key)) updateAc(e.target.value, e.target.selectionStart) }} />
-      {ac && (
-        <div className="fe-ac">
+      {ac && pos && createPortal(
+        <div className="fe-ac" style={{ position: 'fixed', left: pos.left, top: pos.top, width: pos.width, zIndex: 9999 }}>
           <div className="fe-ac-head">Functions — ↑↓ pick · Tab/Enter insert</div>
           {ac.items.map((f, i) => (
             <button key={f[0]} className={'fe-ac-item' + (i === ac.active ? ' on' : '')}
@@ -114,8 +138,7 @@ const FormulaEditor = forwardRef((props, ref) => {
               <b>{f[0]}</b><span>{f[1]}</span>
             </button>
           ))}
-        </div>
-      )}
+        </div>, document.body)}
     </div>
   )
 })
