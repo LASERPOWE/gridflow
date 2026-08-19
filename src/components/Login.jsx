@@ -4,7 +4,7 @@ import { isConfigured } from '../lib/supabase'
 
 function Logo() {
   return (
-    <div className="logo" style={{ fontFamily: 'Manrope,sans-serif' }}>
+    <div className="logo" style={{ fontFamily: 'Inter,sans-serif' }}>
       <span className="sq"><i/><i/><i/><i/></span> smartsheet
       <span style={{ fontWeight: 500, fontSize: 12, color: '#69707d', letterSpacing: 1, marginLeft: 4 }}>by Laser Power</span>
     </div>
