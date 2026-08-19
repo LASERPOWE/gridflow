@@ -258,18 +258,22 @@ function Workspace() {
     setView(v)
   }
 
-  // Favorites: load this user's starred sheets, and toggle/save them.
+  // Favorites: hydrate this user's starred sheets from storage ONCE (so a later
+  // re-render never clobbers an in-progress toggle), then toggle/save them.
+  const favsHydrated = useRef(false)
   useEffect(() => {
-    if (!profile?.id) return
-    try { setFavs(JSON.parse(localStorage.getItem('gf_favs_' + profile.id) || '[]')) } catch { setFavs([]) }
+    if (!profile?.id || favsHydrated.current) return
+    favsHydrated.current = true
+    try { setFavs(JSON.parse(localStorage.getItem('gf_favs_' + profile.id) || '[]')) } catch { /* noop */ }
   }, [profile?.id])
   function toggleFav(id) {
+    const adding = !favs.includes(id)
     setFavs(prev => {
       const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
       if (profile?.id) { try { localStorage.setItem('gf_favs_' + profile.id, JSON.stringify(next)) } catch { /* noop */ } }
-      toast(prev.includes(id) ? 'Removed from Favorites' : 'Added to Favorites ⭐')
       return next
     })
+    toast(adding ? 'Added to Favorites ⭐' : 'Removed from Favorites')
   }
 
   async function loadTree(selectId) {
