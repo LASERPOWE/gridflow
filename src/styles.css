@@ -436,6 +436,10 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:0 0 0 3px rgba(4
 .rlog-wrap{max-height:52vh;overflow:auto;border:1px solid var(--border);border-radius:8px}
 .rlog-table{width:100%;font-size:13px}
 .rlog-table th{position:sticky;top:0;background:var(--panel,#f2f5fb);z-index:1}
+/* tabular figures — digits share the same width so numbers line up cleanly in columns */
+.ag-theme-quartz .ag-cell,.ag-theme-quartz-dark .ag-cell,
+.fe2-field input[type=number],.fxbar .fxinput,
+.admin-table td,.rlog-table td,.toolbar .count{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1,"lnum" 1}
 
 /* ============================================================
    Mobile / responsive
