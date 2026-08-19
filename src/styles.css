@@ -612,3 +612,7 @@ kbd{background:var(--panel);border:1px solid var(--border);border-bottom-width:2
 .fe-ac-item span{color:var(--muted);font-size:12px}
 .fe-ac-item.on,.fe-ac-item:hover{background:var(--hover)}
 [data-theme="dark"] .fe-ac-item.on,[data-theme="dark"] .fe-ac-item:hover{background:#2b3340}
+
+/* ---- inline formula editor (replaces the popup that blanked the grid) ---- */
+.fe-inline{width:100%;height:100%}
+.fe-input2{width:100%;height:100%;border:2px solid var(--ss-blue);outline:none;padding:2px 8px;font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--bg);color:var(--text)}

@@ -334,8 +334,7 @@ function Workspace() {
         },
         cellEditor: (c.type === 'select' || c.type === 'status' || c.type === 'priority') ? 'agSelectCellEditor'
           : c.type === 'date' ? 'agDateStringCellEditor'
-          : FormulaEditor,   // type = in any cell -> in-cell function dropdown, result in the same cell
-        cellEditorPopup: !(c.type === 'select' || c.type === 'status' || c.type === 'priority' || c.type === 'date'),
+          : FormulaEditor,   // type = in any cell -> inline function dropdown, result in the same cell
         cellEditorParams: c.options ? { values: c.options } : undefined,
         // per-cell Excel formatting stored in row.data._fmt[key]
         cellStyle: p => {
@@ -425,12 +424,14 @@ function Workspace() {
 
   // Formula bar: reflect the clicked cell — OR, while building a formula,
   // clicking a cell inserts its reference (Excel-style point & click).
-  // Clicking a cell just reflects it in the formula bar (no point-and-click ref
-  // insertion — formulas are typed directly in the cell now).
+  // Clicking a cell reflects it in the formula bar. While a formula is being
+  // built there (value starts with "="), clicking cells inserts their reference
+  // — Excel-style point-and-click (great for LOOKUP / SUM ranges).
   const onCellClicked = useCallback((e) => {
     const field = e.colDef.field
     const colIdx = field && field.startsWith('data.') ? colsRef.current.findIndex(c => c.key === field.slice(5)) : -1
     const ref = colIdx >= 0 ? colLetter(colIdx) + (e.rowIndex + 1) : null
+    if (fxArmedRef.current && ref) { insertRefIntoFx(ref); return }
     if (!field || !field.startsWith('data.')) { setFx({ label: '', value: '', rowId: null, key: null }); return }
     const key = field.slice(5)
     const raw = e.data?.data?.[key]
@@ -933,10 +934,10 @@ function Workspace() {
             <span className="fxcell">{fx.label || '—'}</span>
             <span className="fxsym">ƒx</span>
             <div className="fx-acwrap">
-              <input ref={fxInputRef} className="fxinput" value={fx.value} disabled={!canWrite || !fx.rowId}
-                placeholder={fx.rowId ? 'Edit here, or type = for function suggestions' : 'Click a cell to edit…'}
-                onChange={e => { const v = e.target.value; fxCursorRef.current = e.target.selectionStart; setFx(f => ({ ...f, value: v })); updateFnAc(v, e.target.selectionStart) }}
-                onFocus={e => { fxCursorRef.current = e.target.selectionStart }}
+              <input ref={fxInputRef} className="fxinput" value={fx.value} disabled={!canWrite || !fx.key}
+                placeholder={fx.key ? 'Type = then click cells to build a formula, e.g. =LOOKUP(…)' : 'Click a cell to edit…'}
+                onChange={e => { const v = e.target.value; fxCursorRef.current = e.target.selectionStart; fxArmedRef.current = v.trim().startsWith('='); setFx(f => ({ ...f, value: v })); updateFnAc(v, e.target.selectionStart) }}
+                onFocus={e => { fxCursorRef.current = e.target.selectionStart; fxArmedRef.current = (fx.value || '').trim().startsWith('=') }}
                 onSelect={e => { fxCursorRef.current = e.target.selectionStart }}
                 onKeyUp={e => { fxCursorRef.current = e.target.selectionStart; if (!['Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'Escape'].includes(e.key)) updateFnAc(e.target.value, e.target.selectionStart) }}
                 onClick={e => { fxCursorRef.current = e.target.selectionStart }}
@@ -962,7 +963,7 @@ function Workspace() {
                 </div>
               )}
             </div>
-            {(fx.value || '').trim().startsWith('=') && <span className="fxhint">↑↓ pick · Tab/Enter insert · Enter to apply</span>}
+            {(fx.value || '').trim().startsWith('=') && <span className="fxhint">📌 Click cells to add refs · ↑↓ pick · Enter to apply</span>}
           </div>
         )}
 
