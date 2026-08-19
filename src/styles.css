@@ -446,8 +446,20 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:0 0 0 3px rgba(4
   --ag-row-border-color:#3a4a63; --ag-header-column-separator-color:#3a4a63; --ag-border-color:#3a4a63}
 .grid-lines.ag-theme-quartz-dark .ag-cell,.grid-lines.ag-theme-quartz-dark .ag-header-cell,
 .grid-lines.ag-theme-quartz-dark .ag-header-group-cell{border-right-color:#3a4a63}
-/* Grid off — no vertical column borders */
+/* Graph-paper background so the whole grid area (incl. empty space beyond the
+   data columns/rows) shows uniform lines, matching the 120px × 36px cells. */
+.grid-lines .ag-body-viewport,.grid-lines .ag-center-cols-viewport{
+  background-image:
+    linear-gradient(to right,#dfe4ec 1px,transparent 1px),
+    linear-gradient(to bottom,#dfe4ec 1px,transparent 1px);
+  background-size:120px 36px;background-position:-1px -1px}
+.grid-lines.ag-theme-quartz-dark .ag-body-viewport,.grid-lines.ag-theme-quartz-dark .ag-center-cols-viewport{
+  background-image:
+    linear-gradient(to right,#334259 1px,transparent 1px),
+    linear-gradient(to bottom,#334259 1px,transparent 1px)}
+/* Grid off — no vertical column borders, no graph background */
 .grid-off{--ag-cell-horizontal-border:none; --ag-header-column-separator-display:none}
+.grid-off .ag-body-viewport,.grid-off .ag-center-cols-viewport{background-image:none}
 /* Grid off — clean, no lines */
 .grid-off .ag-cell,.grid-off .ag-header-cell,.grid-off .ag-header-group-cell{border-right:none}
 .grid-off .ag-row{border-bottom:none;border-top:none}

@@ -423,7 +423,7 @@ function Workspace() {
         headerName: c.label, field: 'data.' + c.key,
         valueGetter: p => p.data?.data?.[c.key],
         valueSetter: p => { if (!p.data.data) p.data.data = {}; p.data.data[c.key] = p.newValue; return true },
-        editable: canWrite && c.type !== 'checkbox', minWidth: 110, flex: 1, cellClass: cc,
+        editable: canWrite && c.type !== 'checkbox', width: 120, minWidth: 60, cellClass: cc,
         pinned: (frozen && idx === 0) ? 'left' : undefined,
         headerComponent: GridHeader,
         headerComponentParams: { colKey: c.key, onRename: (k) => openColRef.current && openColRef.current(k), onRefresh: isAdmin ? ((k) => refreshColRef.current && refreshColRef.current(k)) : undefined },
