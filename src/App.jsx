@@ -1073,7 +1073,7 @@ function Workspace() {
         </SimpleModal>
       )}
 
-      <Notifications open={showNotif} onClose={() => setShowNotif(false)} isApprover={isApprover} onCount={setNotifCount} />
+      <Notifications open={showNotif} onClose={() => setShowNotif(false)} isApprover={isApprover && !asUser} onCount={setNotifCount} />
 
       <SearchModal open={showSearch} onClose={() => setShowSearch(false)}
         sheets={allSheets(tree)} recents={recents} onPick={(s) => { if (view === 'admin') setView('browse'); setFormView(true); selectSheet(s) }} />
