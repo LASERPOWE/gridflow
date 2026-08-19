@@ -616,3 +616,20 @@ kbd{background:var(--panel);border:1px solid var(--border);border-bottom-width:2
 /* ---- inline formula editor (replaces the popup that blanked the grid) ---- */
 .fe-inline{width:100%;height:100%}
 .fe-input2{width:100%;height:100%;border:2px solid var(--ss-blue);outline:none;padding:2px 8px;font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--bg);color:var(--text)}
+
+/* ---- Form-entry view (users fill a form; it lands in the table) ---- */
+.fe2-bg{height:100%;overflow:auto;background:var(--panel);padding:28px 16px;display:flex;justify-content:center}
+.fe2-card{background:var(--bg);width:100%;max-width:640px;border-radius:14px;box-shadow:0 10px 40px rgba(16,30,60,.10);padding:30px 34px;height:fit-content}
+.fe2-title{margin:0 0 4px;font-size:22px;color:var(--text)}
+.fe2-note{margin:0 0 20px;font-size:13px;color:var(--muted);line-height:1.5}
+.fe2-field{margin-bottom:16px;display:flex;flex-direction:column;gap:6px}
+.fe2-field label{font-size:13.5px;font-weight:700;color:var(--text);margin:0}
+.fe2-field input[type=text],.fe2-field input[type=number],.fe2-field input[type=date],.fe2-field select{width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg);color:var(--text)}
+.fe2-field input[type=checkbox]{width:20px;height:20px}
+.fe2-msg{margin:8px 0 4px;padding:10px 14px;border-radius:10px;background:#e7f6ec;color:#1a7f3f;font-size:13px;font-weight:600}
+.fe2-msg.err{background:#fdecea;color:#c0392b}
+.fe2-actions{display:flex;gap:10px;margin-top:20px}
+.fe2-actions .btn{padding:11px 22px;font-size:14px}
+[data-theme="dark"] .fe2-msg{background:#173a26;color:#7fe0a5}
+[data-theme="dark"] .fe2-msg.err{background:#3a1d1a;color:#f3a29a}
+.col-ts{color:var(--muted);font-size:11.5px}

@@ -17,6 +17,7 @@ import SimpleModal from './components/SimpleModal.jsx'
 import FindReplace from './components/FindReplace.jsx'
 import ShareModal from './components/ShareModal.jsx'
 import FormulaEditor, { FN_LIST } from './components/FormulaEditor.jsx'
+import FormEntry from './components/FormEntry.jsx'
 
 // smartsheet logo mark (reused)
 function Mark({ size = 20 }) {
@@ -57,6 +58,8 @@ function fmtNumber(n) { const x = parseFloat(n); return isNaN(x) ? n : x.toLocal
 function fmtCurrency(n) { const x = parseFloat(n); return isNaN(x) ? n : '₹' + x.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 function fmtPercent(n) { const x = parseFloat(n); return isNaN(x) ? n : x + '%' }
 function fmtDate(v) { if (v === '' || v == null) return v; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }
+// Date + time for the "Uploaded" column (when a row was added).
+function fmtDateTime(v) { if (!v) return ''; const d = new Date(v); return isNaN(d.getTime()) ? '' : d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }
 const isChecked = (v) => v === true || v === 'true' || v === 1 || v === '1' || v === 'TRUE'
 
 // Custom grid header: single-click sorts, double-click opens the column editor
@@ -158,6 +161,7 @@ function Workspace() {
   const [wrap, setWrap] = useState(false)     // wrap text in cells
   const [rules, setRules] = useState([])      // conditional colour rules for current sheet
   const [rulesDlg, setRulesDlg] = useState(false)
+  const [formView, setFormView] = useState(false)  // show the form-entry view instead of the table
   const toastId = useRef(0)
   const openColRef = useRef(null)             // latest openColDlg for the grid header
   const activeFxRef = useRef(null)            // active in-cell formula editor bridge (for click-to-insert refs)
@@ -295,6 +299,8 @@ function Workspace() {
 
   const colDefs = useMemo(() => {
     const defs = [{ headerName: '', valueGetter: p => p.node.rowIndex + 1, width: 46, pinned: 'left', cellClass: 'col-idx', sortable: false, filter: false }]
+    // "Uploaded" timestamp — when each entry was added (date + time).
+    defs.push({ headerName: 'Uploaded', valueGetter: p => p.data?.created_at, valueFormatter: p => fmtDateTime(p.value), width: 152, pinned: 'left', cellClass: 'col-ts', editable: false, sortable: true, filter: false })
     if (isWO) {
       defs.push(
         { headerName: 'Status', field: 'status', width: 130, cellRenderer: PillRenderer, cellClass: 'col-blue2',
@@ -775,6 +781,9 @@ function Workspace() {
 
   const setQuickFilter = (v) => { setQuick(v); gridRef.current?.api.setGridOption('quickFilterText', v) }
 
+  // Non-admins only ever see the entry form; admins can toggle table <-> form.
+  const showForm = !!sheet && (!isAdmin || formView)
+
   return (
     <div className={'shell' + (view === 'admin' ? ' admin-mode' : '') + (treeCollapsed && view !== 'admin' ? ' tree-collapsed' : '')}>
       <IconRail view={view} onView={changeView} onCreate={newSheet} onSearch={openSearch}
@@ -858,9 +867,12 @@ function Workspace() {
 
         {/* grid toolbar */}
         <div className="toolbar">
-          {canWrite && <button className="tbtn primary" onClick={addRow}>+ New row</button>}
-          {canWrite && <button className="tbtn" onClick={addColumn}>▥ Add column</button>}
-          {canWrite && <><span className="sep" />
+          {isAdmin && sheet && <button className={'tbtn' + (formView ? ' primary' : '')} title="Switch between table and form-entry view" onClick={() => setFormView(f => !f)}>{formView ? '▦ Table view' : '📝 Form view'}</button>}
+          {isAdmin && sheet && !formView && <button className="tbtn" title="Reload the latest entries" onClick={() => { selectSheet(sheet); toast('Refreshed ✓') }}>🔄 Refresh</button>}
+          {isAdmin && sheet && !formView && <span className="sep" />}
+          {canWrite && !showForm && <button className="tbtn primary" onClick={addRow}>+ New row</button>}
+          {canWrite && !showForm && <button className="tbtn" onClick={addColumn}>▥ Add column</button>}
+          {canWrite && !showForm && <><span className="sep" />
           <button className="tbtn icon" title="Bold (focused cell)" onClick={() => applyFormat('b')}><b>B</b></button>
           <button className="tbtn icon" title="Italic (focused cell)" onClick={() => applyFormat('i')}><i>I</i></button>
           <button className="tbtn icon" title="Underline (focused cell)" onClick={() => applyFormat('u')}><u>U</u></button>
@@ -923,8 +935,8 @@ function Workspace() {
           <span className="sep" />
           <button className="tbtn" title="Download as CSV" onClick={exportCsv}>⬇ CSV</button>
           {sheet && <button className="tbtn primary" title="Share this sheet by email" onClick={() => setShowShare(true)}>🔗 Share</button>}</>}
-          <span className="sep" />
-          <button className="tbtn" onClick={() => setShowImport(true)}>⬇ Import from Smartsheet</button>
+          {isAdmin && !showForm && <><span className="sep" />
+          <button className="tbtn" onClick={() => setShowImport(true)}>⬇ Import from Smartsheet</button></>}
           {sheet && !canWrite && <button className="tbtn" onClick={() => setShowReq(true)}>🔒 Request access</button>}
           <span className="spacer" />
           <input id="gf-search" className="search" placeholder="🔍 Search…" value={quick} onChange={e => setQuickFilter(e.target.value)} />
@@ -932,8 +944,8 @@ function Workspace() {
           <span className="count">{rows.length} rows</span>
         </div>
 
-        {/* formula bar (Excel-style) */}
-        {sheet && (
+        {/* formula bar (Excel-style) — hidden in form-entry view */}
+        {sheet && !showForm && (
           <div className="fxbar">
             <span className="fxcell">{fx.label || '—'}</span>
             <span className="fxsym">ƒx</span>
@@ -973,8 +985,10 @@ function Workspace() {
 
         {err && <div className="err" style={{ padding: '6px 12px' }}>{err}</div>}
 
-        <div className={'grid-wrap ' + (theme === 'dark' ? 'ag-theme-quartz-dark' : 'ag-theme-quartz')} onPaste={handlePaste}>
-          {sheet ? (
+        <div className={'grid-wrap' + (showForm ? '' : (theme === 'dark' ? ' ag-theme-quartz-dark' : ' ag-theme-quartz'))} onPaste={handlePaste}>
+          {showForm ? (
+            <FormEntry sheet={sheet} cols={cols} onSubmitted={() => { selectSheet(sheet); toast('Entry added ✓') }} />
+          ) : sheet ? (
             <AgGridReact ref={gridRef} rowData={displayRows} columnDefs={colDefs} defaultColDef={defaultColDef}
               getRowId={getRowId}
               onCellValueChanged={onCellValueChanged} onCellClicked={onCellClicked}
