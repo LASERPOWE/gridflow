@@ -16,6 +16,7 @@ export default function AdminPanel() {
   const [newEmail, setNewEmail] = useState('')
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
+  const [confirmUser, setConfirmUser] = useState(null)  // user id pending remove confirmation
 
   const load = useCallback(async () => {
     const [u, a, r, o, d, w, s, g] = await Promise.all([
@@ -46,6 +47,17 @@ export default function AdminPanel() {
     setBusy(false)
     if (error) return setMsg('Error: ' + error.message)
     setMsg('Updated'); load()
+  }
+
+  // Remove a user entirely: revoke all their sheet access, then delete the profile.
+  async function removeUser(u) {
+    if (u.email === SUPER_ADMIN_EMAIL) { setMsg('Super Admin is locked.'); setConfirmUser(null); return }
+    setBusy(true)
+    await supabase.from('sheet_access').delete().eq('user_id', u.id)
+    const { error } = await supabase.from('profiles').delete().eq('id', u.id)
+    setBusy(false); setConfirmUser(null)
+    if (error) return setMsg('Error: ' + error.message)
+    setMsg(`Removed ${u.full_name || u.email}`); load()
   }
 
   // ---- access grants ----
@@ -109,7 +121,7 @@ export default function AdminPanel() {
         <div className="admin-card">
           <p className="admin-hint">Super Admin sees everything. Users see only what you grant in the <b>Access</b> tab.</p>
           <table className="admin-table">
-            <thead><tr><th>Name</th><th>Email</th><th>Role</th></tr></thead>
+            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr></thead>
             <tbody>
               {users.map(u => {
                 const locked = u.email === SUPER_ADMIN_EMAIL
@@ -122,6 +134,18 @@ export default function AdminPanel() {
                         <option value="user">user</option>
                       </select>
                     )}</td>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {locked ? <span className="admin-empty">—</span> : (
+                        confirmUser === u.id ? (
+                          <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                            <button className="admin-del" disabled={busy} onClick={() => removeUser(u)}>Confirm remove</button>
+                            <button className="btn ghost sm" disabled={busy} onClick={() => setConfirmUser(null)}>Cancel</button>
+                          </span>
+                        ) : (
+                          <button className="admin-del" disabled={busy} onClick={() => setConfirmUser(u.id)}>Remove</button>
+                        )
+                      )}
+                    </td>
                   </tr>
                 )
               })}
