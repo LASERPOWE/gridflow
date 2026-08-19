@@ -259,7 +259,9 @@ function Workspace() {
     } catch { /* table may not exist yet — ignore */ }
   }
   async function loadRefreshLogs() {
-    const { data } = await supabase.from('refresh_logs').select('*').order('created_at', { ascending: false }).limit(300)
+    if (!sheet) { setRefreshLogs([]); return }
+    // Only this sheet's refreshes — not every sheet's.
+    const { data } = await supabase.from('refresh_logs').select('*').eq('sheet_id', sheet.id).order('created_at', { ascending: false }).limit(300)
     setRefreshLogs(data || [])
   }
 
@@ -1258,18 +1260,17 @@ function Workspace() {
 
       {/* refresh log — who refreshed, when, how long */}
       {showRefreshLog && (
-        <SimpleModal title="Refresh log" onClose={() => setShowRefreshLog(false)}>
-          <p className="dlg-note">Every refresh is recorded here — who did it, the date &amp; time, and how long it took.</p>
+        <SimpleModal title={`Refresh log — ${sheet?.name || ''}`} onClose={() => setShowRefreshLog(false)}>
+          <p className="dlg-note">Refreshes for <b>this sheet only</b> — who did it, the date &amp; time, and how long it took.</p>
           <div className="rlog-wrap">
             <table className="admin-table rlog-table">
-              <thead><tr><th>Who</th><th>Date &amp; time</th><th>Sheet</th><th>What</th><th style={{ textAlign: 'right' }}>Time taken</th></tr></thead>
+              <thead><tr><th>Who</th><th>Date &amp; time</th><th>What</th><th style={{ textAlign: 'right' }}>Time taken</th></tr></thead>
               <tbody>
-                {refreshLogs.length === 0 && <tr><td colSpan={5} className="admin-empty">No refreshes recorded yet.</td></tr>}
+                {refreshLogs.length === 0 && <tr><td colSpan={4} className="admin-empty">No refreshes recorded for this sheet yet.</td></tr>}
                 {refreshLogs.map(r => (
                   <tr key={r.id}>
                     <td>{r.user_name || r.user_email || 'Someone'}</td>
                     <td>{fmtDateTime(r.created_at)}</td>
-                    <td>{r.sheet_name || '—'}</td>
                     <td>{r.scope === 'column' ? (r.column_label || 'Column') : 'Whole sheet'}</td>
                     <td style={{ textAlign: 'right' }}>{fmtDuration(r.duration_ms)}</td>
                   </tr>
