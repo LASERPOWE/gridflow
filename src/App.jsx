@@ -979,65 +979,11 @@ function Workspace() {
         <AdminPanel />
       ) : (
       <>
-      {/* tree */}
-      <div className="tree">
-        <div className="head"><span>Sheets</span>{canWrite && <button title="New sheet" onClick={newSheet}>+</button>}</div>
-        {tree.length === 0 && (
-          <div className="empty tree-empty" style={{ padding: '24px 14px', fontSize: 12.5 }}>
-            {canWrite ? 'No sheets yet.' : (
-              <>
-                <div style={{ fontSize: 26, marginBottom: 8 }}>🔒</div>
-                <div style={{ fontWeight: 600, color: '#3a3f4b', marginBottom: 4 }}>No sheets shared with you yet</div>
-                <div style={{ color: '#8a91a0', marginBottom: 12 }}>Ask an admin for access to a sheet or folder.</div>
-                <button className="btn sm" onClick={() => setShowReq(true)}>Request access</button>
-              </>
-            )}
-          </div>
-        )}
-        {(() => {
-          // One flat list of every sheet (folder groupings hidden).
-          const flat = tree.flatMap(o => o.depts.flatMap(d => d.wss.flatMap(w => w.sheets)))
-          const wsName = tree[0]?.name || 'Sheets'
-          // The Favorites / Recents rail views filter this same list.
-          let list = flat, header = wsName, headIcon = '🏢'
-          if (view === 'favorites') { list = flat.filter(s => favs.includes(s.id)); header = 'Favorites'; headIcon = '⭐' }
-          else if (view === 'recents') { list = recents.filter(Boolean); header = 'Recents'; headIcon = '🕘' }
-          return (
-            <div>
-              <div className="node ws"><span className="ico">{headIcon}</span>{header}</div>
-              {list.length === 0 && view === 'favorites' && (
-                <div className="tree-hint">No favorites yet. Tap the ☆ on any sheet to add it here.</div>
-              )}
-              {list.map(s => {
-                const isFav = favs.includes(s.id)
-                return (
-                  <div key={s.id} className={'sheet-row' + (sheet && sheet.id === s.id ? ' active' : '')}>
-                    <button className="node sheet" onClick={() => { setFormView(true); selectSheet(s) }}>
-                      <span className="ico">▦</span>{s.name}
-                    </button>
-                    <button className={'fav-star' + (isFav ? ' on' : '')} title={isFav ? 'Remove from Favorites' : 'Add to Favorites'}
-                      onClick={(e) => { e.stopPropagation(); toggleFav(s.id) }}>{isFav ? '★' : '☆'}</button>
-                    {canWrite && (
-                      <span className="sheet-actions">
-                        <button title="Rename" onClick={() => renameSheet(s)}>✎</button>
-                        <button title="Delete" onClick={() => setConfirmDel(s)}>🗑</button>
-                      </span>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )
-        })()}
-        <div className="spacer" />
-        <div className="userbox"><div className="name">{profile?.full_name || profile?.email}</div><div className="role">{role.replace(/_/g, ' ')}</div></div>
-      </div>
-
       {/* work */}
       <div className="work">
         {/* top menu bar */}
         <div className="topmenu">
-          <button className="mi mi-toggle" title={treeCollapsed ? 'Show sheets' : 'Hide sheets (full view)'} onClick={() => setTreeCollapsed(c => !c)}>{treeCollapsed ? '▸' : '☰'}</button>
+          <button className="mi mi-toggle" title={treeCollapsed ? 'Show sheet tabs' : 'Hide sheet tabs (full view)'} onClick={() => setTreeCollapsed(c => !c)}>{treeCollapsed ? '▾' : '▴'}</button>
           <span className="doc">
             <Mark size={16} />
             {sheet ? sheet.name : 'smartsheet'}
@@ -1185,7 +1131,7 @@ function Workspace() {
             <div className="onboard">
               <div className="onboard-mark"><Mark size={40} /></div>
               <h2>Welcome to smartsheet by Laser Power</h2>
-              <p>Pick a sheet on the left to open it — or start something new.</p>
+              <p>Pick a sheet from the tabs below to open it — or start something new.</p>
               <div className="onboard-actions">
                 {canWrite && <button className="btn" onClick={newSheet}>＋ New sheet</button>}
                 <button className="btn ghost" onClick={() => setShowImport(true)}>⬇ Import from Smartsheet</button>
@@ -1194,6 +1140,46 @@ function Workspace() {
             </div>
           )}
         </div>
+
+        {/* bottom sheet tabs (Excel-style) */}
+        {!treeCollapsed && (
+        <div className="sheet-tabs">
+          {canWrite && <button className="st-add" title="New sheet" onClick={newSheet}>＋</button>}
+          <div className="st-scroll">
+            {(() => {
+              const flat = tree.flatMap(o => o.depts.flatMap(d => d.wss.flatMap(w => w.sheets)))
+              let list = flat
+              if (view === 'favorites') list = flat.filter(s => favs.includes(s.id))
+              else if (view === 'recents') list = recents.filter(Boolean)
+              if (list.length === 0) {
+                return canWrite
+                  ? <span className="st-empty">No sheets yet — tap ＋ to create one.</span>
+                  : <span className="st-empty">🔒 No sheets shared yet. <button className="st-req" onClick={() => setShowReq(true)}>Request access</button></span>
+              }
+              return list.map(s => {
+                const isFav = favs.includes(s.id)
+                const active = sheet && sheet.id === s.id
+                return (
+                  <div key={s.id} className={'st-tab' + (active ? ' active' : '')} onDoubleClick={() => canWrite && renameSheet(s)}>
+                    <button className="st-name" title={s.name} onClick={() => { setFormView(true); selectSheet(s) }}>
+                      <span className="st-ico">▦</span>{s.name}
+                    </button>
+                    <button className={'st-star' + (isFav ? ' on' : '')} title={isFav ? 'Remove from Favorites' : 'Add to Favorites'}
+                      onClick={(e) => { e.stopPropagation(); toggleFav(s.id) }}>{isFav ? '★' : '☆'}</button>
+                    {canWrite && active && (
+                      <button className="st-del" title="Delete sheet" onClick={(e) => { e.stopPropagation(); setConfirmDel(s) }}>🗑</button>
+                    )}
+                  </div>
+                )
+              })
+            })()}
+          </div>
+          <div className="st-user" title={profile?.email}>
+            <span className="st-uname">{profile?.full_name || profile?.email}</span>
+            <span className="st-urole">{role.replace(/_/g, ' ')}</span>
+          </div>
+        </div>
+        )}
       </div>
       </>
       )}
