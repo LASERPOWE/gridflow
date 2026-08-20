@@ -45,6 +45,19 @@ function colLetter(n) {
   return s
 }
 
+// True when a typed value is a bare arithmetic expression like "45-2" or "20*3"
+// (only digits, operators, parens, spaces — with a real binary operator). We
+// auto-prepend "=" to these in numeric columns so they calculate like Excel.
+function isBareMath(s) {
+  if (typeof s !== 'string') return false
+  const t = s.trim()
+  if (!t || t.startsWith('=')) return false
+  if (!/^[\d.+\-*/()\s]+$/.test(t)) return false   // math characters only
+  if (!/\d/.test(t)) return false                   // must contain a number
+  if (!/[*/]|[\d.)]\s*[-+]/.test(t)) return false   // must contain a binary + - * /
+  return true
+}
+
 // Fixed column colors (Smartsheet-style), matched by column key/label keywords.
 function colorClass(key, label) {
   const s = (key + ' ' + label).toLowerCase()
@@ -422,7 +435,14 @@ function Workspace() {
       defs.push({
         headerName: c.label, field: 'data.' + c.key,
         valueGetter: p => p.data?.data?.[c.key],
-        valueSetter: p => { if (!p.data.data) p.data.data = {}; p.data.data[c.key] = p.newValue; return true },
+        valueSetter: p => {
+          if (!p.data.data) p.data.data = {}
+          let v = p.newValue
+          // In numeric columns, let "45-2" / "20*3" calculate automatically.
+          if ((c.type === 'number' || c.type === 'currency' || c.type === 'percent') && isBareMath(v)) v = '=' + String(v).trim()
+          p.data.data[c.key] = v
+          return true
+        },
         editable: canWrite && c.type !== 'checkbox', width: 120, minWidth: 60, cellClass: cc,
         pinned: (frozen && idx === 0) ? 'left' : undefined,
         headerComponent: GridHeader,
