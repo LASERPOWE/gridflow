@@ -563,8 +563,8 @@ function Workspace() {
   const onCellClicked = useCallback((e) => {
     // If an in-cell formula is being built, the click was already handled as a
     // reference insert (see the mousedown-capture effect) — don't touch the bar.
-    const b = activeFxRef.current
-    if (b && b.isArmed && b.isArmed()) return
+    const ed = document.querySelector('.ag-cell-inline-editing .fe-input2, .ag-cell-inline-editing input')
+    if (ed && (ed.value || '').trim().startsWith('=')) return
     const field = e.colDef.field
     const colIdx = field && field.startsWith('data.') ? colsRef.current.findIndex(c => c.key === field.slice(5)) : -1
     const ref = colIdx >= 0 ? colLetter(colIdx) + (e.rowIndex + 1) : null
@@ -602,8 +602,11 @@ function Workspace() {
   // preventDefault so the editor never loses focus / commits early.
   useEffect(() => {
     const onDown = (e) => {
-      const bridge = activeFxRef.current
-      if (!bridge || !bridge.isArmed || !bridge.isArmed()) return
+      // Is a formula being typed in a cell right now? (read the live editor input)
+      const input = document.querySelector('.ag-cell-inline-editing .fe-input2, .ag-cell-inline-editing input')
+      if (!input) return
+      const val = input.value || ''
+      if (!val.trim().startsWith('=')) return
       const t = e.target
       if (!t || !t.closest) return
       // clicks inside the editor itself or its function dropdown -> normal behaviour
@@ -618,7 +621,18 @@ function Workspace() {
       const colIdx = colsRef.current.findIndex(c => c.key === colId.slice(5))
       if (colIdx < 0) return
       e.preventDefault(); e.stopPropagation()
-      bridge.insertRef(colLetter(colIdx) + (parseInt(ri, 10) + 1))
+      const refStr = colLetter(colIdx) + (parseInt(ri, 10) + 1)
+      const bridge = activeFxRef.current
+      if (bridge && bridge.insertRef) { bridge.insertRef(refStr); return }
+      // Fallback: write into the input via the native setter + input event so
+      // React's onChange picks it up, then restore the caret after re-render.
+      const start = input.selectionStart == null ? val.length : input.selectionStart
+      const nv = val.slice(0, start) + refStr + val.slice(start)
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+      setter.call(input, nv)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      const p = start + refStr.length
+      requestAnimationFrame(() => { input.focus(); try { input.setSelectionRange(p, p) } catch { /* noop */ } })
     }
     document.addEventListener('mousedown', onDown, true)
     return () => document.removeEventListener('mousedown', onDown, true)
