@@ -525,6 +525,21 @@ function Workspace() {
     }
   }, [])
 
+  // When a cell enters edit mode, kill the browser's native autofill/history
+  // dropdown (it was showing previously-typed values like "ko" on double-click).
+  const onCellEditingStarted = useCallback(() => {
+    requestAnimationFrame(() => {
+      document.querySelectorAll('.ag-cell-editor input, .ag-input-field-input, .ag-text-field-input')
+        .forEach(el => {
+          el.setAttribute('autocomplete', 'off')
+          el.setAttribute('autocorrect', 'off')
+          el.setAttribute('autocapitalize', 'off')
+          el.setAttribute('spellcheck', 'false')
+          el.setAttribute('name', 'gf-cell-' + Math.random().toString(36).slice(2))
+        })
+    })
+  }, [])
+
   // Insert a cell reference (e.g. "A5") into the formula being typed in the bar.
   function insertRefIntoFx(ref) {
     const el = fxInputRef.current
@@ -1111,6 +1126,7 @@ function Workspace() {
             <AgGridReact ref={gridRef} rowData={displayRows} columnDefs={colDefs} defaultColDef={defaultColDef}
               getRowId={getRowId}
               onCellValueChanged={onCellValueChanged} onCellClicked={onCellClicked}
+              onCellEditingStarted={onCellEditingStarted}
               onCellContextMenu={onCellContextMenu}
               enterNavigatesVertically enterNavigatesVerticallyAfterEdit
               rowBuffer={20} enableCellTextSelection stopEditingWhenCellsLoseFocus />
