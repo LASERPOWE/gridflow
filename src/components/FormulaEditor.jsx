@@ -63,6 +63,11 @@ const FormulaEditor = forwardRef((props, ref) => {
   const inputRef = useRef(null)
   const valueRef = useRef(value); valueRef.current = value
 
+  // AG Grid v32 uses reactiveCustomComponents by default: the editor must push
+  // its value up via props.onValueChange (the legacy getValue below is ignored
+  // in that mode). Propagate every change so edits actually commit.
+  useEffect(() => { if (props.onValueChange) props.onValueChange(value) }, [value])
+
   // getValue: what AG Grid stores. focusIn: AG Grid calls this to move focus into
   // the editor synchronously when editing starts — so keystrokes never get lost.
   useImperativeHandle(ref, () => ({
