@@ -1,6 +1,12 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
+// Module-level bridge to the currently-open in-cell formula editor. The grid
+// (App.jsx) reads this to insert cell references on click while a formula is
+// being typed. Using a shared module object (instead of a prop passed through
+// AG Grid) guarantees App and the editor share the exact same reference.
+export const formulaBridge = { current: null }
+
 // Excel-style function list (name + short help) — shared with the formula bar.
 export const FN_LIST = [
   ['SUM', 'Add up numbers / a range'],
@@ -94,12 +100,15 @@ const FormulaEditor = forwardRef((props, ref) => {
       if (startChar == null) el.select?.()
       updateAc(el.value, el.value.length)
     }, 0)
-    // register a bridge so the grid can insert cell references on click (if provided)
+    // register bridges so the grid can insert cell references on click.
+    const reg = { isArmed: () => (valueRef.current || '').trim().startsWith('='), insertRef }
+    formulaBridge.current = reg
     const b = props.bridge
-    if (b) b.current = { isArmed: () => (valueRef.current || '').trim().startsWith('='), insertRef }
+    if (b) b.current = reg
     return () => {
       clearTimeout(t)
-      if (props.bridge && props.bridge.current && props.bridge.current.insertRef === insertRef) props.bridge.current = null
+      if (formulaBridge.current === reg) formulaBridge.current = null
+      if (props.bridge && props.bridge.current === reg) props.bridge.current = null
     }
   }, []) // eslint-disable-line
 
