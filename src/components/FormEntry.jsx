@@ -45,9 +45,19 @@ export default function FormEntry({ sheet, cols, onSubmitted }) {
 
   async function submit(e) {
     e.preventDefault()
-    setBusy(true); setMsg('')
     const data = {}
-    cols.forEach(c => { const v = vals[c.key]; if (v != null && v !== '') data[c.key] = v })
+    cols.forEach(c => {
+      let v = vals[c.key]
+      if (typeof v === 'string') v = v.trim()
+      if (v != null && v !== '' && v !== false) data[c.key] = v
+    })
+    // Block empty submissions — at least one field must be filled.
+    if (Object.keys(data).length === 0) {
+      setMsg('Error: Please fill in at least one field before submitting.')
+      setTimeout(() => setMsg(''), 4000)
+      return
+    }
+    setBusy(true); setMsg('')
     const { error } = await supabase.from('rows').insert({ sheet_id: sheet.id, data, source_system: 'form' })
     setBusy(false)
     if (error) { setMsg('Error: ' + error.message); return }
