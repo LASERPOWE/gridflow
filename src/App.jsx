@@ -438,8 +438,9 @@ function Workspace() {
         valueSetter: p => {
           if (!p.data.data) p.data.data = {}
           let v = p.newValue
-          // In numeric columns, let "45-2" / "20*3" calculate automatically.
-          if ((c.type === 'number' || c.type === 'currency' || c.type === 'percent') && isBareMath(v)) v = '=' + String(v).trim()
+          // Let a bare expression like "45-2" / "76+89" / "20*3" calculate
+          // automatically in any normal cell (dates are left as typed).
+          if (c.type !== 'date' && c.type !== 'checkbox' && isBareMath(v)) v = '=' + String(v).trim()
           p.data.data[c.key] = v
           return true
         },
