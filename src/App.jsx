@@ -988,7 +988,8 @@ function Workspace() {
   // Non-admins only ever see the entry form. Admins can toggle table <-> form,
   // and can also switch to "User view" to preview exactly what a user sees (form only).
   const asUser = isAdmin && viewAs === 'user'
-  const showForm = !!sheet && (!isAdmin || asUser || formView)
+  // Editor view = table, User view = form. Regular users always get the form.
+  const showForm = !!sheet && (!isAdmin || asUser)
 
   return (
     <div className={'shell' + (view === 'admin' ? ' admin-mode' : '') + (treeCollapsed && view !== 'admin' ? ' tree-collapsed' : '')}>
@@ -1029,11 +1030,10 @@ function Workspace() {
             </div>
           )}
           {isAdmin && <span className="sep" />}
-          {isAdmin && !asUser && sheet && <button className={'tbtn' + (formView ? ' primary' : '')} title="Switch between table and form-entry view" onClick={() => setFormView(f => !f)}>{formView ? '▦ Table view' : '📝 Form view'}</button>}
-          {isAdmin && !asUser && sheet && !formView && <button className="tbtn" title="Reload the latest entries" onClick={refreshSheet}>🔄 Refresh</button>}
-          {isAdmin && !asUser && sheet && !formView && <button className="tbtn" title="See who refreshed, when, and how long it took" onClick={() => { setShowRefreshLog(true); loadRefreshLogs() }}>📋 Refresh log</button>}
+          {isAdmin && !asUser && sheet && <button className="tbtn" title="Reload the latest entries" onClick={refreshSheet}>🔄 Refresh</button>}
+          {isAdmin && !asUser && sheet && <button className="tbtn" title="See who refreshed, when, and how long it took" onClick={() => { setShowRefreshLog(true); loadRefreshLogs() }}>📋 Refresh log</button>}
           {sheet && !showForm && <button className={'tbtn' + (gridLines ? ' on' : '')} title="Show / hide Excel-style grid lines" onClick={() => setGridLines(g => { const nv = !g; try { localStorage.setItem('gf_gridlines', nv ? 'on' : 'off') } catch { /* noop */ } return nv })}>▦ Grid: {gridLines ? 'On' : 'Off'}</button>}
-          {isAdmin && !asUser && sheet && !formView && <span className="sep" />}
+          {isAdmin && !asUser && sheet && <span className="sep" />}
           {canWrite && !showForm && <button className="tbtn primary" onClick={addRow}>+ New row</button>}
           {canWrite && !showForm && <button className="tbtn" onClick={addColumn}>▥ Add column</button>}
           {canWrite && !showForm && <><span className="sep" />
