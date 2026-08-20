@@ -17,7 +17,7 @@ import SearchModal from './components/SearchModal.jsx'
 import SimpleModal from './components/SimpleModal.jsx'
 import FindReplace from './components/FindReplace.jsx'
 import ShareModal from './components/ShareModal.jsx'
-import FormulaEditor, { FN_LIST } from './components/FormulaEditor.jsx'
+import FormulaEditor, { FN_LIST, formulaBridge } from './components/FormulaEditor.jsx'
 import FormEntry from './components/FormEntry.jsx'
 
 // smartsheet logo mark (reused)
@@ -622,10 +622,10 @@ function Workspace() {
       if (colIdx < 0) return
       e.preventDefault(); e.stopPropagation()
       const refStr = colLetter(colIdx) + (parseInt(ri, 10) + 1)
-      const bridge = activeFxRef.current
+      // Preferred: the editor's own insertRef (updates React state so the
+      // committed value is correct). Falls back to a native input write.
+      const bridge = formulaBridge.current || activeFxRef.current
       if (bridge && bridge.insertRef) { bridge.insertRef(refStr); return }
-      // Fallback: write into the input via the native setter + input event so
-      // React's onChange picks it up, then restore the caret after re-render.
       const start = input.selectionStart == null ? val.length : input.selectionStart
       const nv = val.slice(0, start) + refStr + val.slice(start)
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
