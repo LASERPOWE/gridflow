@@ -436,12 +436,13 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:0 0 0 3px rgba(4
 /* Excel-style grid lines toggle. Vertical lines between columns come from AG
    Grid's own cell-border variable (a plain border-right on .ag-cell doesn't
    render in the body); horizontal lines come from the row border + a fallback. */
-.grid-lines{--ag-cell-horizontal-border:1px solid #c3ccda;
-  --ag-row-border-color:#c3ccda; --ag-row-border-width:1px; --ag-row-border-style:solid;
-  --ag-header-column-separator-display:block; --ag-header-column-separator-color:#c3ccda; --ag-header-column-separator-width:1px;
-  --ag-borders:solid 1px; --ag-border-color:#c3ccda}
-.grid-lines .ag-cell{border-right:1px solid #c3ccda}
-.grid-lines .ag-header-cell,.grid-lines .ag-header-group-cell{border-right:1px solid #c3ccda}
+.grid-lines{--ag-cell-horizontal-border:1px solid #9aa7bb;
+  --ag-row-border-color:#9aa7bb; --ag-row-border-width:1px; --ag-row-border-style:solid;
+  --ag-header-column-separator-display:block; --ag-header-column-separator-color:#8593ab; --ag-header-column-separator-width:1px;
+  --ag-borders:solid 1px; --ag-border-color:#8593ab}
+.grid-lines .ag-cell{border-right:1px solid #9aa7bb}
+.grid-lines .ag-header-cell,.grid-lines .ag-header-group-cell{border-right:1px solid #8593ab;border-bottom:1px solid #8593ab}
+.grid-lines .ag-row{border-bottom:1px solid #9aa7bb}
 .grid-lines.ag-theme-quartz-dark{--ag-cell-horizontal-border:1px solid #3a4a63;
   --ag-row-border-color:#3a4a63; --ag-header-column-separator-color:#3a4a63; --ag-border-color:#3a4a63}
 .grid-lines.ag-theme-quartz-dark .ag-cell,.grid-lines.ag-theme-quartz-dark .ag-header-cell,
@@ -450,8 +451,8 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:0 0 0 3px rgba(4
    data columns/rows) shows uniform lines, matching the 120px × 36px cells. */
 .grid-lines .ag-body-viewport,.grid-lines .ag-center-cols-viewport{
   background-image:
-    linear-gradient(to right,#dfe4ec 1px,transparent 1px),
-    linear-gradient(to bottom,#dfe4ec 1px,transparent 1px);
+    linear-gradient(to right,#9aa7bb 1px,transparent 1px),
+    linear-gradient(to bottom,#9aa7bb 1px,transparent 1px);
   background-size:120px 36px;background-position:-1px -1px}
 .grid-lines.ag-theme-quartz-dark .ag-body-viewport,.grid-lines.ag-theme-quartz-dark .ag-center-cols-viewport{
   background-image:
