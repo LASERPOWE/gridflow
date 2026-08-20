@@ -450,7 +450,7 @@ function Workspace() {
         cellEditor: (c.type === 'select' || c.type === 'status' || c.type === 'priority') ? 'agSelectCellEditor'
           : c.type === 'date' ? 'agDateStringCellEditor'
           : FormulaEditor,   // type = in any cell -> inline function dropdown, result in the same cell
-        cellEditorParams: c.options ? { values: c.options } : undefined,
+        cellEditorParams: { ...(c.options ? { values: c.options } : {}), bridge: activeFxRef },
         // per-cell Excel formatting stored in row.data._fmt[key]
         cellStyle: p => {
           const f = p.data?.data?._fmt?.[c.key] || {}
@@ -561,6 +561,10 @@ function Workspace() {
   // built there (value starts with "="), clicking cells inserts their reference
   // — Excel-style point-and-click (great for LOOKUP / SUM ranges).
   const onCellClicked = useCallback((e) => {
+    // If an in-cell formula is being built, the click was already handled as a
+    // reference insert (see the mousedown-capture effect) — don't touch the bar.
+    const b = activeFxRef.current
+    if (b && b.isArmed && b.isArmed()) return
     const field = e.colDef.field
     const colIdx = field && field.startsWith('data.') ? colsRef.current.findIndex(c => c.key === field.slice(5)) : -1
     const ref = colIdx >= 0 ? colLetter(colIdx) + (e.rowIndex + 1) : null
@@ -590,6 +594,35 @@ function Workspace() {
     window.addEventListener('keydown', onKey)
     return () => { window.removeEventListener('click', close); window.removeEventListener('keydown', onKey) }
   }, [ctx])
+
+  // Excel-style point-and-click while typing a formula INSIDE a cell.
+  // When the in-cell formula editor is armed (value starts with "="), a mousedown
+  // on any OTHER cell inserts that cell's reference (e.g. "B5") into the formula
+  // instead of closing the editor. We intercept at mousedown (capture phase) and
+  // preventDefault so the editor never loses focus / commits early.
+  useEffect(() => {
+    const onDown = (e) => {
+      const bridge = activeFxRef.current
+      if (!bridge || !bridge.isArmed || !bridge.isArmed()) return
+      const t = e.target
+      if (!t || !t.closest) return
+      // clicks inside the editor itself or its function dropdown -> normal behaviour
+      if (t.closest('.fe-inline') || t.closest('.fe-ac')) return
+      const cell = t.closest('.ag-cell')
+      if (!cell || cell.classList.contains('ag-cell-inline-editing')) return
+      const colId = cell.getAttribute('col-id')
+      if (!colId || !colId.startsWith('data.')) return
+      const row = cell.closest('.ag-row')
+      const ri = row && row.getAttribute('row-index')
+      if (ri == null) return
+      const colIdx = colsRef.current.findIndex(c => c.key === colId.slice(5))
+      if (colIdx < 0) return
+      e.preventDefault(); e.stopPropagation()
+      bridge.insertRef(colLetter(colIdx) + (parseInt(ri, 10) + 1))
+    }
+    document.addEventListener('mousedown', onDown, true)
+    return () => document.removeEventListener('mousedown', onDown, true)
+  }, [])
 
   // Close toolbar dropdowns (Insert / Delete / Type) on outside click / Escape.
   useEffect(() => {
