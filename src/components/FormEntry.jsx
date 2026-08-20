@@ -46,15 +46,29 @@ export default function FormEntry({ sheet, cols, onSubmitted }) {
   async function submit(e) {
     e.preventDefault()
     const data = {}
+    const missing = []   // required fields left blank
+    const badNum = []    // numeric fields with a non-number value
     cols.forEach(c => {
+      // Checkboxes always have a valid value (checked/unchecked).
+      if (c.type === 'checkbox') { data[c.key] = !!vals[c.key]; return }
       let v = vals[c.key]
       if (typeof v === 'string') v = v.trim()
-      if (v != null && v !== '' && v !== false) data[c.key] = v
+      if (v == null || v === '') { missing.push(c.label); return }
+      if ((c.type === 'number' || c.type === 'currency' || c.type === 'percent') && isNaN(parseFloat(v))) {
+        badNum.push(c.label)
+      }
+      data[c.key] = v
     })
-    // Block empty submissions — at least one field must be filled.
-    if (Object.keys(data).length === 0) {
-      setMsg('Error: Please fill in at least one field before submitting.')
-      setTimeout(() => setMsg(''), 4000)
+    // Every field must be filled...
+    if (missing.length) {
+      setMsg('Error: Please fill all fields. Missing: ' + missing.join(', '))
+      setTimeout(() => setMsg(''), 6000)
+      return
+    }
+    // ...and numeric fields must contain a valid number.
+    if (badNum.length) {
+      setMsg('Error: These fields need a valid number: ' + badNum.join(', '))
+      setTimeout(() => setMsg(''), 6000)
       return
     }
     setBusy(true); setMsg('')
@@ -72,7 +86,7 @@ export default function FormEntry({ sheet, cols, onSubmitted }) {
     <div className="fe2-bg">
       <form className="fe2-card" onSubmit={submit}>
         <h2 className="fe2-title">{sheet.name}</h2>
-        <p className="fe2-note">Fill in the details below and click <b>Submit entry</b>. Your entry is saved to the table with the date &amp; time.</p>
+        <p className="fe2-note">Fill in <b>all</b> the fields below, then click <b>Submit entry</b>. Your entry is saved to the table with the date &amp; time.</p>
         {cols.map(c => (
           <div className="fe2-field" key={c.key}>
             <label>{c.label}</label>
