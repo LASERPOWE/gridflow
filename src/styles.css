@@ -730,3 +730,87 @@ kbd{background:var(--panel);border:1px solid var(--border);border-bottom-width:2
 [data-theme="dark"] .fe2-msg{background:#173a26;color:#7fe0a5}
 [data-theme="dark"] .fe2-msg.err{background:#3a1d1a;color:#f3a29a}
 .col-ts{color:var(--muted);font-size:11.5px}
+
+/* ============================================================
+   UI POLISH PASS — refined interactions, depth & accessibility
+   (keeps the Laser Power blue brand + Inter; overrides above)
+   ============================================================ */
+:root{
+  --elev-1:0 1px 2px rgba(16,30,60,.06), 0 1px 3px rgba(16,30,60,.10);
+  --elev-2:0 4px 12px rgba(16,30,60,.10), 0 2px 4px rgba(16,30,60,.06);
+  --elev-3:0 12px 32px rgba(16,30,60,.16), 0 4px 10px rgba(16,30,60,.08);
+  --ring:0 0 0 3px rgba(47,91,214,.28);
+  --ease:cubic-bezier(.4,0,.2,1);
+}
+
+/* Smooth, consistent micro-interactions everywhere */
+.btn,.tbtn,.mi,.viewas-tab,.st-tab,.st-add,.st-star,.auth-tab,.btn-google,.node,.sheet-row,.rail-item,.fav-star,.out,.link{
+  transition:background .16s var(--ease),color .16s var(--ease),border-color .16s var(--ease),box-shadow .18s var(--ease),transform .12s var(--ease);
+}
+/* Every clickable element gets a pointer cursor */
+button:not(:disabled),.link,[role="tab"],.st-tab,.node{cursor:pointer}
+
+/* Accessible focus ring (keyboard) — soft, brand-tinted, not a harsh outline */
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{
+  outline:none;box-shadow:var(--ring);border-radius:var(--radius);
+}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--ss-blue);box-shadow:var(--ring)}
+
+/* Primary buttons — subtle depth + lift on hover, press on active */
+.btn{box-shadow:var(--elev-1);border-radius:8px;letter-spacing:.1px}
+.btn:hover:not(:disabled){box-shadow:var(--elev-2);transform:translateY(-1px)}
+.btn:active:not(:disabled){transform:translateY(0);box-shadow:var(--elev-1)}
+.btn.ghost{box-shadow:none}
+.btn.ghost:hover:not(:disabled){border-color:#c3ccda;box-shadow:var(--elev-1);transform:translateY(-1px)}
+
+/* Toolbar buttons — cleaner hover + rounded */
+.tbtn{border-radius:7px}
+.tbtn:hover:not(:disabled){background:var(--hover)}
+.tbtn.primary{box-shadow:var(--elev-1)}
+.tbtn.primary:hover:not(:disabled){box-shadow:var(--elev-2);transform:translateY(-1px)}
+
+/* Top blue menu — a touch of depth so it reads as a header */
+.topmenu{box-shadow:0 2px 8px rgba(16,30,60,.14);z-index:6}
+
+/* Editor / User view toggle — pill segmented control */
+.viewas-tab:hover{background:var(--hover)}
+
+/* Login screen — richer card + gradient, animated entrance */
+.auth-wrap{background:linear-gradient(150deg,#2f5bd6 0%,#3b46c8 50%,#5b3fb8 100%)}
+.auth-card{box-shadow:0 24px 60px rgba(10,20,60,.34);border-radius:16px;animation:authIn .4s var(--ease)}
+@keyframes authIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
+.btn-google{box-shadow:var(--elev-1)}
+.btn-google:hover{box-shadow:var(--elev-2);transform:translateY(-1px)}
+
+/* Entry form — elevated card, roomier fields, clear focus */
+.fe2-card{box-shadow:var(--elev-2);border-radius:14px}
+.fe2-field input,.fe2-field select,.fe2-inrow input,.fe2-inrow select{border-radius:8px;padding:10px 12px;transition:border-color .16s var(--ease),box-shadow .16s var(--ease)}
+.fe2-field input:hover,.fe2-inrow input:hover,.fe2-field select:hover{border-color:#c3ccda}
+.fe2-title{letter-spacing:-.2px}
+
+/* Modals — soft elevation + blurred backdrop */
+.modal{box-shadow:var(--elev-3);border-radius:14px}
+.modal-overlay{background:rgba(16,24,44,.42);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+
+/* Refined scrollbars (webkit) */
+*::-webkit-scrollbar{width:10px;height:10px}
+*::-webkit-scrollbar-thumb{background:#c7cfdd;border-radius:6px;border:2px solid transparent;background-clip:content-box}
+*::-webkit-scrollbar-thumb:hover{background:#a9b4c4;background-clip:content-box}
+*::-webkit-scrollbar-track{background:transparent}
+
+/* Toasts / status pills get gentle elevation */
+.toast,.out{box-shadow:var(--elev-2)}
+
+/* Respect users who prefer less motion */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important;scroll-behavior:auto !important}
+  .btn:hover,.tbtn:hover,.btn-google:hover{transform:none}
+}
+
+[data-theme="dark"]{
+  --elev-1:0 1px 2px rgba(0,0,0,.4);
+  --elev-2:0 4px 14px rgba(0,0,0,.5);
+  --elev-3:0 14px 36px rgba(0,0,0,.6);
+  --ring:0 0 0 3px rgba(122,160,255,.35);
+}
+[data-theme="dark"] *::-webkit-scrollbar-thumb{background:#3a4152;background-clip:content-box}
