@@ -222,7 +222,8 @@ function Workspace() {
   const fxInputRef = useRef(null)     // formula bar <input>
   const fxArmedRef = useRef(false)    // true while building a formula (click cells to insert refs)
   const fxCursorRef = useRef(0)       // last caret position in the formula bar
-  const undoRef = useRef([])          // stack of {rowId, colId, old}
+  const undoRef = useRef([])          // stack of {rowId, colId, old, new}
+  const redoRef = useRef([])          // redo stack
   const undoingRef = useRef(false)
   const sheetRef = useRef(null); sheetRef.current = sheet
 
@@ -515,27 +516,30 @@ function Workspace() {
   const getRowId = useCallback((p) => p.data.id ? String(p.data.id) : 'v' + p.data._vi, [])
 
   const onCellValueChanged = useCallback(async (e) => {
+    setSaved('saving')
     // Virtual (unsaved) row: create it in the DB on first edit.
     if (!e.data.id) {
       const sh = sheetRef.current; if (!sh) return
       const { data: ins, error } = await supabase.from('rows')
         .insert({ sheet_id: sh.id, data: e.data.data || {}, source_system: 'manual' })
         .select().single()
-      if (error) { setErr(error.message); return }
+      if (error) { setErr(error.message); setSaved('idle'); return }
       setRows(rs => [...rs, ins])
+      markSaved()
       e.api.refreshCells({ force: true })
       return
     }
     // record for undo (skip while an undo is being applied)
     if (!undoingRef.current && e.colDef.field) {
-      undoRef.current.push({ rowId: e.data.id, colId: e.colDef.field, old: e.oldValue })
+      undoRef.current.push({ rowId: e.data.id, colId: e.colDef.field, old: e.oldValue, new: e.newValue })
+      redoRef.current = []   // a fresh edit clears the redo stack
       if (undoRef.current.length > 100) undoRef.current.shift()
     }
     const patch = e.colDef.field === 'status' ? { status: e.newValue }
       : e.colDef.field === 'priority' ? { priority: e.newValue }
       : { data: e.data.data }
     const { error } = await supabase.from('rows').update(patch).eq('id', e.data.id)
-    if (error) { setErr(error.message); toast(error.message, 'err') } else { markSaved() }
+    if (error) { setErr(error.message); toast(error.message, 'err'); setSaved('idle') } else { markSaved() }
     // recompute any formulas that depend on the changed cell
     e.api.refreshCells({ force: true })
     // keep the formula bar in sync with the edited cell
@@ -831,16 +835,24 @@ function Workspace() {
     return false
   }
 
-  // ---- undo ----
-  function doUndo() {
-    const u = undoRef.current.pop(); if (!u) return
-    const api = gApi(); if (!api) return
+  // ---- undo / redo ----
+  function applyHistory(u, useOld) {
+    const api = gApi(); if (!api) return false
     let node = null
     api.forEachNode(n => { if (n.data?.id === u.rowId) node = n })
-    if (!node) return
+    if (!node) return false
     undoingRef.current = true
-    node.setDataValue(u.colId, u.old)
+    node.setDataValue(u.colId, useOld ? u.old : u.new)
     setTimeout(() => { undoingRef.current = false }, 0)
+    return true
+  }
+  function doUndo() {
+    const u = undoRef.current.pop(); if (!u) return
+    if (applyHistory(u, true)) redoRef.current.push(u); else undoRef.current.push(u)
+  }
+  function doRedo() {
+    const u = redoRef.current.pop(); if (!u) return
+    if (applyHistory(u, false)) undoRef.current.push(u); else redoRef.current.push(u)
   }
 
   // keyboard shortcuts
@@ -849,7 +861,9 @@ function Workspace() {
       const mod = e.ctrlKey || e.metaKey
       if (!mod) { if (e.key === 'F1') { e.preventDefault(); setShowHelp(true) } return }
       const k = (e.key || '').toLowerCase()
-      if (k === 'z') { e.preventDefault(); doUndo() }
+      if (k === 'z' && e.shiftKey) { e.preventDefault(); doRedo() }
+      else if (k === 'z') { e.preventDefault(); doUndo() }
+      else if (k === 'y') { e.preventDefault(); doRedo() }
       else if (k === 'h') { e.preventDefault(); setShowFR(true) }
       else if (k === 'f') { e.preventDefault(); const el = document.getElementById('gf-search'); if (el) { el.focus(); el.select?.() } }
       else if (k === 's') { e.preventDefault(); toast('Changes save automatically ✓') }
@@ -860,6 +874,26 @@ function Workspace() {
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, []) // eslint-disable-line
+
+  // ---- live collaboration: realtime sync of rows for the open sheet ----
+  // When another user inserts/edits/deletes a row, reflect it instantly for
+  // everyone. Our own changes echo back harmlessly (deduped / idempotent).
+  useEffect(() => {
+    const sid = sheet?.id
+    if (!sid) return
+    const ch = supabase.channel('rows-' + sid)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rows', filter: 'sheet_id=eq.' + sid }, (p) => {
+        setRows(prev => {
+          if (p.eventType === 'INSERT') return prev.some(r => r.id === p.new.id) ? prev : [...prev, p.new]
+          if (p.eventType === 'UPDATE') return prev.map(r => r.id === p.new.id ? p.new : r)
+          if (p.eventType === 'DELETE') return prev.filter(r => r.id !== p.old.id)
+          return prev
+        })
+        try { gridRef.current?.api?.refreshCells?.({ force: true }) } catch { /* noop */ }
+      })
+      .subscribe()
+    return () => { try { supabase.removeChannel(ch) } catch { /* noop */ } }
+  }, [sheet?.id])
 
   // ---- CSV export (download the sheet like Excel) ----
   function exportCsv() {
@@ -1088,6 +1122,7 @@ function Workspace() {
           <button className="tbtn" title="Import from Smartsheet" onClick={() => setShowImport(true)}>⬇ Import</button></>}
           <span className="spacer" />
           <input id="gf-search" className="search" placeholder="🔍 Search…" value={quick} onChange={e => setQuickFilter(e.target.value)} />
+          {saved === 'saving' && <span className="saved-pill saving">Saving…</span>}
           {saved === 'saved' && <span className="saved-pill">Saved ✓</span>}
           <span className="count">{rows.length} rows</span>
         </div>

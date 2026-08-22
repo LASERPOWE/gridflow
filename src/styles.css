@@ -630,6 +630,8 @@ html,body{overflow-x:hidden}
 /* ---- saved pill ---- */
 .saved-pill{font-size:11.5px;font-weight:700;color:#1a7f3f;background:#e7f6ec;border:1px solid #b7e4c6;border-radius:20px;padding:3px 10px;margin-right:6px;animation:fadein .2s ease}
 [data-theme="dark"] .saved-pill{background:#173a26;color:#7fe0a5;border-color:#2a5c3f}
+.saved-pill.saving{color:#8a6d00;background:#fff7e0;border-color:#f0d98a}
+[data-theme="dark"] .saved-pill.saving{background:#3a3115;color:#e8c766;border-color:#5c4d20}
 
 /* ---- toasts ---- */
 .toast-wrap{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:200;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
