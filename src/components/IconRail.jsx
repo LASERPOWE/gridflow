@@ -17,18 +17,12 @@ export default function IconRail({ view, onView, onCreate, onSearch, onNotif, no
         </div>
         <Item icon="🏠" label="Home" active={view === 'home'} onClick={() => onView('home')} />
         <Item icon="🔔" label="Notifications" badge={notifCount || 0} onClick={onNotif} />
-        <Item icon="🔍" label="Search" onClick={onSearch} />
-        <Item icon="🗂" label="Browse" active={view === 'browse'} onClick={() => onView('browse')} />
         <Item icon="🕘" label="Recents" active={view === 'recents'} onClick={() => onView('recents')} />
         <Item icon="⭐" label="Favorites" active={view === 'favorites'} onClick={() => onView('favorites')} />
-        <Item icon="🧩" label="Resource Management" onClick={() => onView('resource')} />
-        <Item icon="🧱" label="WorkApps" onClick={() => onView('workapps')} />
         {canWrite && <Item icon="➕" label="Create" onClick={onCreate} />}
         {isAdmin && <Item icon="🛡" label="Admin" active={view === 'admin'} onClick={() => onView('admin')} />}
       </div>
       <div className="rail-bottom">
-        <Item icon="▦" label="Apps" onClick={() => onView('apps')} />
-        <Item icon="❔" label="Help" onClick={() => onView('help')} />
         <button className="rail-avatar" title="Profile" onClick={onProfile}>{initials || 'U'}</button>
       </div>
     </nav>
