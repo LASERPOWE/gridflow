@@ -135,7 +135,7 @@ const FUNCS = {
   POWER: a => Math.pow(toNum(a[0]), toNum(a[1])),
   MOD: a => { const y = toNum(a[1]); return y === 0 ? '#DIV/0!' : toNum(a[0]) % y },
   IF: a => toBool(a[0]) ? (a[1] ?? '') : (a[2] ?? ''),
-  IFERROR: a => { const v = a[0]; return (typeof v === 'string' && v.startsWith('#')) ? (a[1] ?? '') : v },
+  IFERROR: a => { const v = a[0]; const err = (typeof v === 'string' && v.startsWith('#')) || (typeof v === 'number' && !isFinite(v)); return err ? (a[1] ?? '') : v },
   AND: a => flat(a).every(toBool),
   OR: a => flat(a).some(toBool),
   NOT: a => !toBool(a[0]),
@@ -417,7 +417,9 @@ class Parser {
       return str
     }
 
-    const idM = /^[A-Za-z_]+/.exec(rest)
+    // Allow digits inside a name so function names like LOG10 / ATAN2 are
+    // recognised as functions (not mistaken for cell references).
+    const idM = /^[A-Za-z_][A-Za-z0-9_]*/.exec(rest)
     if (idM) {
       const word = idM[0]
       let j = this.i + word.length
