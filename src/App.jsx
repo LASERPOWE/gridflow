@@ -27,7 +27,7 @@ function Mark({ size = 20 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24">
       <rect x="1" y="1" width="22" height="22" rx="6" fill="#fff" />
-      <path d="M6 12.5l3.5 3.5L18 7.5" stroke="#5b4fe0" strokeWidth="2.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6 12.5l3.5 3.5L18 7.5" stroke="#2f5bd6" strokeWidth="2.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
