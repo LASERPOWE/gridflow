@@ -884,9 +884,9 @@ function Workspace() {
     const base = tgt ? tgt.position : cols.length
     const pos = side === 'left' ? base : base + 1
     for (const col of cols) { if (col.position >= pos) await supabase.from('sheet_columns').update({ position: col.position + 1 }).eq('id', col.id) }
-    const key = 'col_' + Date.now().toString(36)
+    const key = 'col_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
     const { error } = await supabase.from('sheet_columns').insert({ sheet_id: sheet.id, key, label: 'New', type: 'text', position: pos })
-    if (error) return setErr(error.message)
+    if (error) { setErr(error.message); toast(error.message, 'err'); return }
     await relabelGrid()
     selectSheet(sheet)
   }
@@ -1069,10 +1069,14 @@ function Workspace() {
   }
   async function addColumn() {
     if (!sheet) return
-    const key = 'col_' + colLetter(cols.length).toLowerCase()
+    // Unique key — letter-based keys (col_a, col_b…) collide once any column
+    // has been deleted, so use a timestamp+random key that can never clash.
+    const key = 'col_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+    const maxPos = cols.reduce((m, c) => Math.max(m, c.position || 0), 0)
     const label = colLetter(cols.length)
-    const { error } = await supabase.from('sheet_columns').insert({ sheet_id: sheet.id, key, label, type: 'text', position: cols.length + 1 })
-    if (error) return setErr(error.message)
+    const { error } = await supabase.from('sheet_columns').insert({ sheet_id: sheet.id, key, label, type: 'text', position: maxPos + 1 })
+    if (error) { setErr(error.message); toast(error.message, 'err'); return }
+    await relabelGrid()
     selectSheet(sheet)
   }
   function renameSheet(s) { setNameDlg({ mode: 'rename', value: s.name, sheet: s }) }
