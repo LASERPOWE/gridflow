@@ -10,7 +10,7 @@
   --indigo:#5b4fe0; --indigo-dark:#4a3fd0; --pink:#ff2f87;
   --teal1:#2fded0; --teal2:#25bfe0;
   --grad-primary:linear-gradient(135deg,#5b8bef 0%,#6c5ce7 100%);
-  --grad-side:linear-gradient(185deg,#6151e6 0%,#8b6cf0 55%,#9b7cf2 100%);
+  --grad-side:linear-gradient(185deg,#5b4fe0 0%,#6a54e8 55%,#7b5fee 100%);
   --font: 'Inter', -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
 *{box-sizing:border-box}
@@ -308,13 +308,18 @@ button,.tbtn,.rail-item,.node,.mi,.out{transition:background .18s var(--ease), c
 .tree .head{letter-spacing:.6px}
 .tree .userbox{background:#fafbfe}
 
-/* topmenu: glossy blue gradient */
-.topmenu{background:linear-gradient(180deg,#3660da 0%,#5b4fe0 100%);box-shadow:0 2px 10px rgba(91,79,224,.28);height:44px;position:relative;z-index:5}
-.topmenu .mi{border-radius:7px;font-weight:600}
-.topmenu .mi:hover{background:rgba(255,255,255,.18);transform:translateY(-1px)}
-.topmenu .doc{font-size:15px}
-.topmenu .out{background:rgba(255,255,255,.18);border-radius:7px;font-weight:600}
-.topmenu .out:hover{background:rgba(255,255,255,.32);transform:translateY(-1px)}
+/* topmenu: clean white bar (like reference) */
+.topmenu{background:#fff;box-shadow:0 1px 0 var(--border);height:46px;position:relative;z-index:5;color:var(--text)}
+.topmenu .mi{color:var(--text);border-radius:7px;font-weight:600;opacity:1}
+.topmenu .mi:hover{background:var(--hover);transform:translateY(-1px)}
+.topmenu .doc{font-size:15px;color:var(--text)}
+.topmenu .who{color:var(--muted)}
+.topmenu .out{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:7px;font-weight:600}
+.topmenu .out:hover{background:#ecebff;transform:translateY(-1px)}
+.topmenu-search{background:var(--panel);color:var(--muted);border:1px solid var(--border)}
+.topmenu-search:hover{background:#ecebff;color:var(--indigo)}
+.topmenu-avatar{border:2px solid #eceaff;background:linear-gradient(135deg,#ff5b93,#c23aff)}
+.topmenu-avatar:hover{border-color:var(--indigo)}
 
 /* toolbar: floating soft bar */
 .toolbar{background:#fff;border-bottom:1px solid #e6ebf3;padding:8px 14px;box-shadow:0 1px 0 rgba(16,30,60,.03)}
