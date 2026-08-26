@@ -19,6 +19,7 @@ import FindReplace from './components/FindReplace.jsx'
 import ShareModal from './components/ShareModal.jsx'
 import FormulaEditor, { FN_LIST, formulaBridge } from './components/FormulaEditor.jsx'
 import FormEntry from './components/FormEntry.jsx'
+import MobileCards from './components/MobileCards.jsx'
 
 // smartsheet logo mark (reused)
 function Mark({ size = 20 }) {
@@ -191,6 +192,7 @@ function Workspace() {
   const [confirmDel, setConfirmDel] = useState(null)  // sheet pending delete
   const [recents, setRecents] = useState([])  // recently opened sheets
   const [frozen, setFrozen] = useState(false) // freeze first data column
+  const [isNarrow, setIsNarrow] = useState(() => { try { return window.matchMedia('(max-width: 640px)').matches } catch { return false } }) // phone-size screen -> card view
   const [fx, setFx] = useState({ label: '', value: '', rowId: null, key: null }) // formula bar
   const [menu, setMenu] = useState(null)      // toolbar dropdown: 'insert' | 'delete' | 'format' | null
   const [showFR, setShowFR] = useState(false) // find & replace
@@ -259,6 +261,75 @@ function Workspace() {
     window.clearTimeout(markSaved._t)
     markSaved._t = window.setTimeout(() => setSaved('idle'), 1600)
   }
+
+  // Switch to phone card-view when the screen gets narrow.
+  useEffect(() => {
+    let mq
+    try { mq = window.matchMedia('(max-width: 640px)') } catch { return }
+    const on = e => setIsNarrow(e.matches)
+    setIsNarrow(mq.matches)
+    if (mq.addEventListener) mq.addEventListener('change', on)
+    else mq.addListener(on)
+    return () => { if (mq.removeEventListener) mq.removeEventListener('change', on); else mq.removeListener(on) }
+  }, [])
+
+  // Save one cell from the mobile card view (mirrors the grid's save logic).
+  const saveCell = useCallback(async (row, c, value) => {
+    setSaved('saving')
+    let v = value
+    if (c.type !== 'date' && c.type !== 'checkbox' && isBareMath(v)) v = '=' + String(v).trim()
+    const data = { ...(row.data || {}), [c.key]: v }
+    // new (unsaved) row -> insert
+    if (!row.id) {
+      const sh = sheetRef.current; if (!sh) return
+      const { data: ins, error } = await supabase.from('rows')
+        .insert({ sheet_id: sh.id, data, source_system: 'manual' }).select().single()
+      if (error) { setErr(error.message); toast(error.message, 'err'); setSaved('idle'); return }
+      setRows(rs => [...rs, ins]); markSaved(); return
+    }
+    const { error } = await supabase.from('rows').update({ data }).eq('id', row.id)
+    if (error) { setErr(error.message); toast(error.message, 'err'); setSaved('idle'); return }
+    setRows(rs => rs.map(r => r.id === row.id ? { ...r, data } : r))
+    markSaved()
+  }, [])
+
+  // Add a blank row from the mobile card view.
+  const addMobileRow = useCallback(async () => {
+    const sh = sheetRef.current; if (!sh) return
+    setSaved('saving')
+    const { data: ins, error } = await supabase.from('rows')
+      .insert({ sheet_id: sh.id, data: {}, source_system: 'manual' }).select().single()
+    if (error) { setErr(error.message); toast(error.message, 'err'); setSaved('idle'); return }
+    setRows(rs => [...rs, ins]); markSaved()
+  }, [])
+
+  // --- Column width memory (per sheet, saved on this device) ---
+  const colwKey = (sid) => 'gf_colw_' + sid
+  const saveColWidths = useCallback(() => {
+    const sh = sheetRef.current; const api = gridRef.current?.api
+    if (!sh || !api) return
+    try {
+      const map = {}
+      api.getColumnState().forEach(s => { if (s.width) map[s.colId] = s.width })
+      localStorage.setItem(colwKey(sh.id), JSON.stringify(map))
+    } catch {}
+  }, [])
+  const applySavedWidths = useCallback(() => {
+    const sh = sheetRef.current; const api = gridRef.current?.api
+    if (!sh || !api) return
+    try {
+      const raw = localStorage.getItem(colwKey(sh.id)); if (!raw) return
+      const map = JSON.parse(raw)
+      const state = Object.keys(map).map(colId => ({ colId, width: map[colId] }))
+      if (state.length) api.applyColumnState({ state })
+    } catch {}
+  }, [])
+  // Re-apply saved widths when opening a different sheet.
+  useEffect(() => {
+    if (!sheet?.id) return
+    const t = setTimeout(applySavedWidths, 120)
+    return () => clearTimeout(t)
+  }, [sheet?.id, applySavedWidths])
 
   // Apply and persist the theme (light / dark).
   useEffect(() => {
@@ -1171,12 +1242,17 @@ function Workspace() {
         <div className={'grid-wrap' + (showForm ? '' : (theme === 'dark' ? ' ag-theme-quartz-dark' : ' ag-theme-quartz')) + (gridLines ? ' grid-lines' : ' grid-off')} onPaste={handlePaste}>
           {showForm ? (
             <FormEntry sheet={sheet} cols={cols} onSubmitted={() => { selectSheet(sheet); toast('Entry added ✓') }} />
+          ) : (sheet && isNarrow) ? (
+            <MobileCards cols={cols} rows={rows} canWrite={canWrite}
+              resolveCell={resolveCell} onSave={saveCell} onAdd={addMobileRow} />
           ) : sheet ? (
             <AgGridReact ref={gridRef} rowData={displayRows} columnDefs={colDefs} defaultColDef={defaultColDef}
               getRowId={getRowId}
               onCellValueChanged={onCellValueChanged} onCellClicked={onCellClicked}
               onCellEditingStarted={onCellEditingStarted}
               onCellContextMenu={onCellContextMenu}
+              onColumnResized={e => { if (e.finished) saveColWidths() }}
+              onFirstDataRendered={applySavedWidths}
               enterNavigatesVertically enterNavigatesVerticallyAfterEdit
               rowBuffer={20} enableCellTextSelection stopEditingWhenCellsLoseFocus />
           ) : loading ? (
