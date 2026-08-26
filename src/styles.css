@@ -71,7 +71,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--ss-blue);border-
 .tree .userbox .role{color:var(--muted);text-transform:capitalize}
 
 /* work area */
-.work{display:flex;flex-direction:column;overflow:hidden;background:#fff}
+.work{display:flex;flex-direction:column;overflow:hidden;background:#fff;position:relative}
 
 /* bottom sheet tabs (Excel-style taskbar) */
 .sheet-tabs{display:flex;align-items:stretch;height:36px;flex-shrink:0;background:#eef1f6;border-top:1px solid var(--border);font-size:13px;z-index:5}
@@ -844,3 +844,41 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--ss-blue)
 [data-theme="dark"] .mc-input{background:#0f1420;border-color:#2b3550;color:#e7ecf4}
 [data-theme="dark"] .mc-input:disabled{background:#141a28;color:#7c88a0}
 [data-theme="dark"] .mc-add{background:#161c2b;border-color:#2b3550;color:#9db3e6}
+
+/* ===== Bulk action bar (row multi-select) ===== */
+.bulkbar{position:absolute;left:50%;transform:translateX(-50%);bottom:52px;z-index:60;display:flex;align-items:center;gap:8px;
+  background:#1e2942;color:#fff;padding:8px 10px 8px 16px;border-radius:12px;box-shadow:0 10px 30px rgba(15,20,32,.35);animation:bulkup .18s ease}
+@keyframes bulkup{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+.bulk-count{font-size:13px;font-weight:700;margin-right:4px;white-space:nowrap}
+.bulk-btn{border:0;background:rgba(255,255,255,.14);color:#fff;font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer;white-space:nowrap}
+.bulk-btn:hover{background:rgba(255,255,255,.24)}
+.bulk-btn.danger{background:#e5484d}
+.bulk-btn.danger:hover{background:#f2555a}
+.bulk-btn.ghost{background:transparent;opacity:.8}
+.bulk-btn.ghost:hover{background:rgba(255,255,255,.12);opacity:1}
+[data-theme="dark"] .bulkbar{background:#0c1424;border:1px solid #263352}
+
+/* ===== First-visit guided tour ===== */
+.tour-ov{position:fixed;inset:0;z-index:9998;background:rgba(12,18,30,.55);backdrop-filter:blur(3px);display:grid;place-items:center;padding:20px;animation:tfade .2s ease}
+@keyframes tfade{from{opacity:0}to{opacity:1}}
+.tour-card{width:min(440px,94vw);background:#fff;border-radius:18px;padding:26px 26px 20px;text-align:center;box-shadow:0 24px 60px rgba(12,18,30,.4);animation:tpop .22s cubic-bezier(.2,.8,.2,1)}
+@keyframes tpop{from{opacity:0;transform:scale(.94) translateY(8px)}to{opacity:1;transform:none}}
+.tour-emoji{font-size:40px;line-height:1;margin-bottom:12px}
+.tour-title{margin:0 0 8px;font-size:18px;font-weight:800;color:#1e2942;letter-spacing:-.2px}
+.tour-body{margin:0 auto;font-size:13.5px;line-height:1.65;color:#55617a;max-width:340px}
+.tour-dots{display:flex;justify-content:center;gap:7px;margin:20px 0 18px}
+.tour-dot{width:8px;height:8px;border-radius:50%;background:#d3dae8;cursor:pointer;transition:all .15s}
+.tour-dot.on{background:#2f5bd6;width:22px;border-radius:4px}
+.tour-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tour-skip{background:none;border:0;color:#8b97af;font-size:13px;cursor:pointer;padding:8px 6px;min-width:44px;text-align:left}
+.tour-skip:hover{color:#55617a}
+.tour-nav{display:flex;gap:8px}
+.tour-btn{border:0;background:#2f5bd6;color:#fff;font-size:13px;font-weight:700;padding:9px 18px;border-radius:9px;cursor:pointer}
+.tour-btn:hover{background:#274fbe}
+.tour-btn.ghost{background:#eef2fb;color:#2f5bd6}
+.tour-btn.ghost:hover{background:#e2e9f8}
+[data-theme="dark"] .tour-card{background:#161c2b;box-shadow:0 24px 60px rgba(0,0,0,.6)}
+[data-theme="dark"] .tour-title{color:#eef2fb}
+[data-theme="dark"] .tour-body{color:#9aa6bd}
+[data-theme="dark"] .tour-dot{background:#2b3550}
+[data-theme="dark"] .tour-btn.ghost{background:#1e2740;color:#9db3e6}

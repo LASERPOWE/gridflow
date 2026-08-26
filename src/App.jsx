@@ -20,6 +20,7 @@ import ShareModal from './components/ShareModal.jsx'
 import FormulaEditor, { FN_LIST, formulaBridge } from './components/FormulaEditor.jsx'
 import FormEntry from './components/FormEntry.jsx'
 import MobileCards from './components/MobileCards.jsx'
+import Tour from './components/Tour.jsx'
 
 // smartsheet logo mark (reused)
 function Mark({ size = 20 }) {
@@ -216,6 +217,10 @@ function Workspace() {
   const [favs, setFavs] = useState([])             // favorite sheet ids (per user, saved on this device)
   const [showRefreshLog, setShowRefreshLog] = useState(false)  // refresh-history modal
   const [refreshLogs, setRefreshLogs] = useState([])           // rows from refresh_logs
+  const [selCount, setSelCount] = useState(0)      // number of real rows currently checkbox-selected
+  const [bulkConfirm, setBulkConfirm] = useState(false)  // confirm dialog for bulk delete
+  const [virtualCount, setVirtualCount] = useState(300)  // how many blank rows to render (grows on scroll)
+  const [showTour, setShowTour] = useState(false)  // first-visit guided tour
   const toastId = useRef(0)
   const openColRef = useRef(null)             // latest openColDlg for the grid header
   const refreshColRef = useRef(null)          // latest refreshColumn for the grid header
@@ -486,7 +491,8 @@ function Workspace() {
   const isWO = sheet?.kind === 'work_orders'
 
   const colDefs = useMemo(() => {
-    const defs = [{ headerName: '', valueGetter: p => p.node.rowIndex + 1, width: 46, pinned: 'left', cellClass: 'col-idx', sortable: false, filter: false }]
+    const defs = [{ headerName: '', valueGetter: p => p.node.rowIndex + 1, width: canWrite ? 62 : 46, pinned: 'left', cellClass: 'col-idx', sortable: false, filter: false,
+      checkboxSelection: canWrite, headerCheckboxSelection: false, suppressHeaderMenuButton: true }]
     if (isWO) {
       defs.push(
         { headerName: 'Status', field: 'status', width: 130, cellRenderer: PillRenderer, cellClass: 'col-blue2',
@@ -571,15 +577,37 @@ function Workspace() {
 
   const defaultColDef = useMemo(() => ({ sortable: true, resizable: true, filter: true, minWidth: 110 }), [])
 
-  // Excel-like big grid: show up to 10,000 rows. Real (saved) rows sit on top;
-  // the rest are lightweight virtual placeholders that become real on first edit.
-  const TOTAL_ROWS = 10000
+  // Excel-like big grid. Real (saved) rows sit on top; the rest are lightweight
+  // virtual placeholders that become real on first edit. Instead of always
+  // building 10,000 placeholders (slow for big sheets + wasted memory), we render
+  // an adaptive window that grows as the user scrolls toward the bottom.
+  const MAX_ROWS = 50000
   const displayRows = useMemo(() => {
+    const total = Math.min(Math.max(rows.length + 50, virtualCount), MAX_ROWS)
     const out = rows.slice()
-    for (let i = rows.length; i < TOTAL_ROWS; i++) out.push({ __v: true, _vi: i, data: {} })
+    for (let i = rows.length; i < total; i++) out.push({ __v: true, _vi: i, data: {} })
     return out
-  }, [rows])
+  }, [rows, virtualCount])
   const getRowId = useCallback((p) => p.data.id ? String(p.data.id) : 'v' + p.data._vi, [])
+  // Grow the virtual window when the user scrolls near the bottom.
+  const onGridScroll = useCallback((e) => {
+    const api = e.api
+    const last = api.getLastDisplayedRowIndex ? api.getLastDisplayedRowIndex() : api.getLastDisplayedRow?.()
+    if (last == null) return
+    setVirtualCount(vc => (last >= vc - 25 ? Math.min(vc + 300, MAX_ROWS) : vc))
+  }, [])
+  // Reset the window back to a small size when opening a different sheet.
+  useEffect(() => { setVirtualCount(300) }, [sheet?.id])
+
+  // First-visit guided tour (once per device).
+  useEffect(() => {
+    if (!profile) return
+    try { if (!localStorage.getItem('gf_tour_done')) setShowTour(true) } catch {}
+  }, [profile])
+  const closeTour = useCallback(() => {
+    setShowTour(false)
+    try { localStorage.setItem('gf_tour_done', '1') } catch {}
+  }, [])
 
   const onCellValueChanged = useCallback(async (e) => {
     setSaved('saving')
@@ -810,6 +838,35 @@ function Workspace() {
     const node = gApi().getDisplayedRowAtIndex(cell.rowIndex); if (!node?.data) return
     await supabase.from('rows').delete().eq('id', node.data.id)
     setRows(rs => rs.filter(r => r.id !== node.data.id))
+  }
+
+  // ---- bulk row actions (multi-select via checkboxes) ----
+  const selectedRealRows = () => {
+    const api = gridRef.current?.api; if (!api) return []
+    return api.getSelectedNodes().map(n => n.data).filter(d => d && d.id)
+  }
+  async function bulkDelete() {
+    setBulkConfirm(false)
+    const picked = selectedRealRows(); if (!picked.length) return
+    const ids = picked.map(r => r.id)
+    setSaved('saving')
+    const { error } = await supabase.from('rows').delete().in('id', ids)
+    if (error) { setErr(error.message); toast(error.message, 'err'); setSaved('idle'); return }
+    setRows(rs => rs.filter(r => !ids.includes(r.id)))
+    gridRef.current?.api?.deselectAll()
+    setSelCount(0); markSaved(); toast(`Deleted ${ids.length} row${ids.length > 1 ? 's' : ''} ✓`)
+  }
+  async function bulkDuplicate() {
+    const picked = selectedRealRows(); if (!picked.length) return
+    const sh = sheetRef.current; if (!sh) return
+    setSaved('saving')
+    const payload = picked.map(r => ({ sheet_id: sh.id, data: { ...(r.data || {}) },
+      ...(r.status ? { status: r.status } : {}), ...(r.priority ? { priority: r.priority } : {}), source_system: 'manual' }))
+    const { data: ins, error } = await supabase.from('rows').insert(payload).select()
+    if (error) { setErr(error.message); toast(error.message, 'err'); setSaved('idle'); return }
+    setRows(rs => [...rs, ...(ins || [])])
+    gridRef.current?.api?.deselectAll()
+    setSelCount(0); markSaved(); toast(`Duplicated ${ins.length} row${ins.length > 1 ? 's' : ''} ✓`)
   }
 
   // ---- insert / delete columns ----
@@ -1243,10 +1300,14 @@ function Workspace() {
           ) : sheet ? (
             <AgGridReact ref={gridRef} rowData={displayRows} columnDefs={colDefs} defaultColDef={defaultColDef}
               getRowId={getRowId}
+              rowSelection="multiple" suppressRowClickSelection
+              isRowSelectable={node => !!node.data?.id}
+              onSelectionChanged={e => setSelCount(e.api.getSelectedNodes().filter(n => n.data?.id).length)}
               onCellValueChanged={onCellValueChanged} onCellClicked={onCellClicked}
               onCellEditingStarted={onCellEditingStarted}
               onCellContextMenu={onCellContextMenu}
               onColumnResized={e => { if (e.finished) saveColWidths() }}
+              onBodyScrollEnd={onGridScroll}
               enterNavigatesVertically enterNavigatesVerticallyAfterEdit
               rowBuffer={20} enableCellTextSelection stopEditingWhenCellsLoseFocus />
           ) : loading ? (
@@ -1263,9 +1324,20 @@ function Workspace() {
                 <button className="btn ghost" onClick={() => setShowImport(true)}>⬇ Import from Smartsheet</button>
               </div>
               <button className="onboard-help" onClick={() => setShowHelp(true)}>⌨ See keyboard shortcuts</button>
+              <button className="onboard-help" onClick={() => setShowTour(true)}>🧭 Take the quick tour</button>
             </div>
           )}
         </div>
+
+        {/* bulk action bar — appears when rows are checkbox-selected */}
+        {!showForm && canWrite && selCount > 0 && (
+          <div className="bulkbar">
+            <span className="bulk-count">{selCount} selected</span>
+            <button className="bulk-btn" onClick={bulkDuplicate}>⧉ Duplicate</button>
+            <button className="bulk-btn danger" onClick={() => setBulkConfirm(true)}>🗑 Delete</button>
+            <button className="bulk-btn ghost" onClick={() => { gridRef.current?.api?.deselectAll(); setSelCount(0) }}>Clear</button>
+          </div>
+        )}
 
         {/* bottom sheet tabs (Excel-style) */}
         {!treeCollapsed && (
@@ -1368,6 +1440,20 @@ function Workspace() {
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
             <button className="btn ghost" onClick={() => setConfirmDel(null)}>Cancel</button>
             <button className="btn" style={{ background: '#e5484d' }} onClick={() => reallyDeleteSheet(confirmDel)}>Delete</button>
+          </div>
+        </SimpleModal>
+      )}
+
+      {showTour && <Tour onClose={closeTour} />}
+
+      {bulkConfirm && (
+        <SimpleModal title={`Delete ${selCount} row${selCount > 1 ? 's' : ''}?`} onClose={() => setBulkConfirm(false)}>
+          <p style={{ fontSize: 13.5, color: '#3a3f4b', lineHeight: 1.6 }}>
+            Permanently delete the <b>{selCount}</b> selected row{selCount > 1 ? 's' : ''}? This cannot be undone.
+          </p>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+            <button className="btn ghost" onClick={() => setBulkConfirm(false)}>Cancel</button>
+            <button className="btn" style={{ background: '#e5484d' }} onClick={bulkDelete}>Delete {selCount}</button>
           </div>
         </SimpleModal>
       )}
