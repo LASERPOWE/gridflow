@@ -286,7 +286,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--ss-blue);border-
   --radius:9px;
   --ease:cubic-bezier(.2,.8,.2,1);
 }
-body{background:#f2f5fb}
+body{background:linear-gradient(135deg,var(--teal1) 0%,var(--teal2) 100%);background-attachment:fixed}
 button,.tbtn,.rail-item,.node,.mi,.out{transition:background .18s var(--ease), color .18s var(--ease), box-shadow .2s var(--ease), transform .12s var(--ease), border-color .18s var(--ease)}
 
 /* rail: purple/indigo gradient + smoother active */
