@@ -304,32 +304,27 @@ function Workspace() {
   }, [])
 
   // --- Column width memory (per sheet, saved on this device) ---
+  // Saved widths are baked straight into each colDef's width, so a column keeps
+  // its size even when the column definitions rebuild (rules load, wrap toggle…).
   const colwKey = (sid) => 'gf_colw_' + sid
+  const [colWidths, setColWidths] = useState({})
+  // Load this sheet's saved widths whenever the open sheet changes.
+  useEffect(() => {
+    if (!sheet?.id) { setColWidths({}); return }
+    try { setColWidths(JSON.parse(localStorage.getItem(colwKey(sheet.id)) || '{}') || {}) }
+    catch { setColWidths({}) }
+  }, [sheet?.id])
+  // Persist the current column widths after the user drags a column border.
   const saveColWidths = useCallback(() => {
     const sh = sheetRef.current; const api = gridRef.current?.api
     if (!sh || !api) return
     try {
       const map = {}
-      api.getColumnState().forEach(s => { if (s.width) map[s.colId] = s.width })
+      api.getColumnState().forEach(s => { if (s.width && s.colId?.startsWith('data.')) map[s.colId] = s.width })
       localStorage.setItem(colwKey(sh.id), JSON.stringify(map))
+      setColWidths(map)   // keep state in sync so later rebuilds keep the width
     } catch {}
   }, [])
-  const applySavedWidths = useCallback(() => {
-    const sh = sheetRef.current; const api = gridRef.current?.api
-    if (!sh || !api) return
-    try {
-      const raw = localStorage.getItem(colwKey(sh.id)); if (!raw) return
-      const map = JSON.parse(raw)
-      const state = Object.keys(map).map(colId => ({ colId, width: map[colId] }))
-      if (state.length) api.applyColumnState({ state })
-    } catch {}
-  }, [])
-  // Re-apply saved widths when opening a different sheet.
-  useEffect(() => {
-    if (!sheet?.id) return
-    const t = setTimeout(applySavedWidths, 120)
-    return () => clearTimeout(t)
-  }, [sheet?.id, applySavedWidths])
 
   // Apply and persist the theme (light / dark).
   useEffect(() => {
@@ -516,7 +511,7 @@ function Workspace() {
           p.data.data[c.key] = v
           return true
         },
-        editable: canWrite && c.type !== 'checkbox', width: 120, minWidth: 60, cellClass: cc,
+        editable: canWrite && c.type !== 'checkbox', width: colWidths['data.' + c.key] || 120, minWidth: 60, cellClass: cc,
         pinned: (frozen && idx === 0) ? 'left' : undefined,
         headerComponent: GridHeader,
         headerComponentParams: { colKey: c.key, onRename: (k) => openColRef.current && openColRef.current(k), onRefresh: isAdmin ? ((k) => refreshColRef.current && refreshColRef.current(k)) : undefined },
@@ -572,7 +567,7 @@ function Workspace() {
     // Placed AFTER all data columns so it sits at the end of the row.
     defs.push({ headerName: 'Uploaded', valueGetter: p => p.data?.created_at, valueFormatter: p => fmtDateTime(p.value), width: 160, cellClass: 'col-ts', editable: false, sortable: true, filter: false })
     return defs
-  }, [cols, isWO, canWrite, frozen, resolveCell, rules, wrap, isAdmin])
+  }, [cols, isWO, canWrite, frozen, resolveCell, rules, wrap, isAdmin, colWidths])
 
   const defaultColDef = useMemo(() => ({ sortable: true, resizable: true, filter: true, minWidth: 110 }), [])
 
@@ -1252,7 +1247,6 @@ function Workspace() {
               onCellEditingStarted={onCellEditingStarted}
               onCellContextMenu={onCellContextMenu}
               onColumnResized={e => { if (e.finished) saveColWidths() }}
-              onFirstDataRendered={applySavedWidths}
               enterNavigatesVertically enterNavigatesVerticallyAfterEdit
               rowBuffer={20} enableCellTextSelection stopEditingWhenCellsLoseFocus />
           ) : loading ? (
