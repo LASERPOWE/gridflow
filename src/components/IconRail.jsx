@@ -13,7 +13,7 @@ export default function IconRail({ view, onView, onCreate, onSearch, onNotif, no
     <nav className="rail">
       <div className="rail-top">
         <div className="rail-brand" title="smartsheet by Laser Power">
-          <svg width="22" height="22" viewBox="0 0 24 24"><rect x="1" y="1" width="22" height="22" rx="6" fill="#fff"/><path d="M6 12.5l3.5 3.5L18 7.5" stroke="#2f5bd6" strokeWidth="2.6" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <svg width="22" height="22" viewBox="0 0 24 24"><rect x="1" y="1" width="22" height="22" rx="6" fill="#fff"/><path d="M6 12.5l3.5 3.5L18 7.5" stroke="#5b4fe0" strokeWidth="2.6" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </div>
         <Item icon="🏠" label="Home" active={view === 'home'} onClick={() => onView('home')} />
         <Item icon="🔔" label="Notifications" badge={notifCount || 0} onClick={onNotif} />
