@@ -920,3 +920,22 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--ss-blue)
 .u-act.danger:hover{border-color:#e5484d;background:#fdeaea}
 .u-confirm{display:inline-flex;gap:6px;align-items:center}
 @media(max-width:720px){.u-joined{display:none}.u-search{width:100%}}
+
+/* ===== Admin · Column Permissions matrix ===== */
+.cpcard{max-width:100%}
+.cp-pickers{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.cp-pickers select{min-width:240px;flex:0 1 300px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px}
+.cp-scroll{overflow:auto;border:1px solid var(--border);border-radius:12px;max-height:60vh}
+.cp-table{border-collapse:separate;border-spacing:0;font-size:12.5px;width:100%;min-width:760px}
+.cp-table th,.cp-table td{border-bottom:1px solid #eef1f5;border-right:1px solid #eef1f5;padding:8px 10px;text-align:center;white-space:nowrap}
+.cp-table thead th{position:sticky;top:0;background:#eef3ff;z-index:2;font-weight:700;color:#33405c}
+.cp-group{background:#e3ecff !important;font-size:12px;letter-spacing:.2px}
+.cp-ctrl{font-weight:600;font-size:11.5px;color:#4a5772}
+.cp-ctrl label{display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap}
+.cp-colhead{position:sticky;left:0;z-index:3;background:#eef3ff !important;text-align:left;min-width:200px}
+.cp-colname{position:sticky;left:0;background:#fff;z-index:1;text-align:left;font-weight:600;color:var(--text);min-width:200px;box-shadow:1px 0 0 #eef1f5}
+.cp-colname em{color:var(--muted);font-weight:500;font-style:normal;font-size:11px}
+.cp-table tbody tr:hover td{background:#f7f9ff}
+.cp-table tbody tr:hover .cp-colname{background:#f7f9ff}
+.cp-cell input,.cp-ctrl input{width:15px;height:15px;cursor:pointer;accent-color:var(--ss-blue)}
+.cp-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
