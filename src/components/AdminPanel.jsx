@@ -4,6 +4,19 @@ import { useAuth } from '../lib/auth.jsx'
 
 const SUPER_ADMIN_EMAIL = 'samrat.dey@laserpowerinfra.com'
 
+// Deterministic avatar colour from a name/email (matches the "coloured initial" look).
+const AV_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#14b8a6', '#f97316', '#3b82f6']
+function avatarColor(s) { let h = 0; const t = String(s || ''); for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0; return AV_COLORS[h % AV_COLORS.length] }
+function initials(name, email) { const base = (name || email || 'U').trim(); const parts = base.split(/\s+/); return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || base.slice(0, 2).toUpperCase() }
+function fmtJoined(ts) { if (!ts) return '—'; try { return new Date(ts).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) } catch { return '—' } }
+// Role label + colour for the badge.
+function roleInfo(u) {
+  if (u.email === SUPER_ADMIN_EMAIL) return { label: 'Owner', cls: 'owner' }
+  if (u.global_role === 'super_admin') return { label: 'Super Admin', cls: 'super' }
+  if (u.global_role === 'admin') return { label: 'Admin', cls: 'admin' }
+  return { label: 'User', cls: 'user' }
+}
+
 export default function AdminPanel() {
   const { profile } = useAuth()
   const isSuper = profile?.email === SUPER_ADMIN_EMAIL   // only the Super Admin may remove users
@@ -18,6 +31,7 @@ export default function AdminPanel() {
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirmUser, setConfirmUser] = useState(null)  // user id pending remove confirmation
+  const [userQuery, setUserQuery] = useState('')        // search box on the Users tab
 
   const load = useCallback(async () => {
     const [u, a, r, o, d, w, s, g] = await Promise.all([
@@ -120,42 +134,59 @@ export default function AdminPanel() {
       </div>
       {msg && <div className="admin-msg">{msg}</div>}
 
-      {tab === 'users' && (
-        <div className="admin-card">
-          <p className="admin-hint">Super Admin sees everything. Users see only what you grant in the <b>Access</b> tab.</p>
-          <table className="admin-table">
-            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr></thead>
-            <tbody>
-              {users.map(u => {
-                const locked = u.email === SUPER_ADMIN_EMAIL
-                return (
-                  <tr key={u.id}>
-                    <td>{u.full_name || '—'}</td>
-                    <td>{u.email}</td>
-                    <td>{locked ? <span className="admin-lock">🔒 Super Admin</span> : (
-                      <select value={u.global_role === 'super_admin' ? 'user' : (u.global_role || 'user')} disabled={busy} onChange={e => setRole(u, e.target.value)}>
-                        <option value="user">user</option>
-                      </select>
-                    )}</td>
-                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      {(!isSuper || locked) ? <span className="admin-empty">—</span> : (
-                        confirmUser === u.id ? (
-                          <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                            <button className="admin-del" disabled={busy} onClick={() => removeUser(u)}>Confirm remove</button>
-                            <button className="btn ghost sm" disabled={busy} onClick={() => setConfirmUser(null)}>Cancel</button>
-                          </span>
-                        ) : (
-                          <button className="admin-del" disabled={busy} onClick={() => setConfirmUser(u.id)}>Remove</button>
-                        )
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {tab === 'users' && (() => {
+        const q = userQuery.trim().toLowerCase()
+        const isAdminRole = u => u.email === SUPER_ADMIN_EMAIL || u.global_role === 'super_admin' || u.global_role === 'admin'
+        const match = u => !q || (u.full_name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q)
+        const admins = users.filter(u => isAdminRole(u) && match(u))
+        const basics = users.filter(u => !isAdminRole(u) && match(u))
+        const manageAccess = (u) => { setPickUser(u.id); setTab('access') }
+        const renderRow = (u) => {
+          const r = roleInfo(u); const locked = u.email === SUPER_ADMIN_EMAIL
+          return (
+            <div className="u-row" key={u.id}>
+              <div className="u-id">
+                <span className="u-avatar" style={{ background: avatarColor(u.email) }}>{initials(u.full_name, u.email)}</span>
+                <div className="u-idtext">
+                  <div className="u-name">{u.full_name || 'Unnamed'} <span className={'u-badge ' + r.cls}>{r.label}</span></div>
+                  <div className="u-email">{u.email}</div>
+                </div>
+              </div>
+              <div className="u-joined">Joined {fmtJoined(u.created_at)}</div>
+              <div className="u-actions">
+                <button className="u-act" title="Grant / manage this user's sheet access" onClick={() => manageAccess(u)}>🔑 Access</button>
+                {isSuper && !locked && (confirmUser === u.id
+                  ? <span className="u-confirm"><button className="admin-del" disabled={busy} onClick={() => removeUser(u)}>Confirm</button><button className="btn ghost sm" disabled={busy} onClick={() => setConfirmUser(null)}>Cancel</button></span>
+                  : <button className="u-act danger" title="Remove user" onClick={() => setConfirmUser(u.id)}>🗑</button>)}
+              </div>
+            </div>
+          )
+        }
+        return (
+          <div className="admin-card ucard">
+            <div className="u-toolbar">
+              <div className="u-count"><b>{users.length}</b> users · <b>{admins.length}</b> admin · <b>{basics.length}</b> basic</div>
+              <input className="u-search" placeholder="🔍  Search name or email…" value={userQuery} onChange={e => setUserQuery(e.target.value)} />
+            </div>
+
+            <div className="u-sec">
+              <span className="u-sec-tag admin-tag">Admin Users</span>
+              <span className="u-legend"><i className="dot owner" />Owner <i className="dot super" />Super Admin <i className="dot admin" />Admin</span>
+            </div>
+            <div className="ulist">
+              {admins.length ? admins.map(renderRow) : <div className="admin-empty">No admins match.</div>}
+            </div>
+
+            <div className="u-sec">
+              <span className="u-sec-tag basic-tag">Basic Users</span>
+              <span className="u-legend">{basics.length} shown · access granted per sheet</span>
+            </div>
+            <div className="ulist">
+              {basics.length ? basics.map(renderRow) : <div className="admin-empty">No basic users match.</div>}
+            </div>
+          </div>
+        )
+      })()}
 
       {tab === 'access' && (
         <div className="admin-card">
