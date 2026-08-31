@@ -17,6 +17,15 @@ function roleInfo(u) {
   return { label: 'User', cls: 'user' }
 }
 
+// Per-column control matrix (matches the reference layout).
+const CP_GROUPS = [
+  { title: 'Entry Controls', keys: [['entry', 'Entry'], ['retain', 'Retain']] },
+  { title: 'View Controls', keys: [['view', 'View'], ['freeze', 'Freeze'], ['filter', 'Filter'], ['quickFilter', 'Quick Filter'], ['spotlight', 'Spotlight']] },
+  { title: 'Edit Controls', keys: [['edit', 'Edit'], ['bulkEdit', 'Bulk edit']] },
+]
+const CP_KEYS = CP_GROUPS.flatMap(g => g.keys)
+const CP_DEFAULT = () => Object.fromEntries(CP_KEYS.map(([k]) => [k, true]))
+
 export default function AdminPanel() {
   const { profile } = useAuth()
   const isSuper = profile?.email === SUPER_ADMIN_EMAIL   // only the Super Admin may remove users
@@ -32,6 +41,12 @@ export default function AdminPanel() {
   const [busy, setBusy] = useState(false)
   const [confirmUser, setConfirmUser] = useState(null)  // user id pending remove confirmation
   const [userQuery, setUserQuery] = useState('')        // search box on the Users tab
+  // Column Permissions tab
+  const [cpSheet, setCpSheet] = useState('')
+  const [cpUser, setCpUser] = useState('')
+  const [cpCols, setCpCols] = useState([])   // sheet_columns of the picked sheet
+  const [cpPerms, setCpPerms] = useState({}) // { colKey: { view:true, edit:true, ... } }
+  const [cpBusy, setCpBusy] = useState(false)
 
   const load = useCallback(async () => {
     const [u, a, r, o, d, w, s, g] = await Promise.all([
@@ -118,6 +133,40 @@ export default function AdminPanel() {
   }
 
   const pending = reqs.filter(r => r.status === 'pending')
+  const allSheets = tree.flatMap(o => o.depts.flatMap(d => d.wss.flatMap(w => w.sheets)))
+
+  // Load a sheet's columns + the picked user's saved permissions.
+  useEffect(() => {
+    if (!cpSheet || !cpUser) { setCpCols([]); setCpPerms({}); return }
+    let alive = true
+    ;(async () => {
+      setCpBusy(true)
+      const [{ data: cols }, { data: perms }] = await Promise.all([
+        supabase.from('sheet_columns').select('*').eq('sheet_id', cpSheet).order('position'),
+        supabase.from('column_permissions').select('*').eq('sheet_id', cpSheet).eq('user_id', cpUser),
+      ])
+      if (!alive) return
+      const pm = {}
+      ;(cols || []).forEach(c => { pm[c.key] = CP_DEFAULT() })
+      ;(perms || []).forEach(p => { if (pm[p.col_key]) pm[p.col_key] = { ...CP_DEFAULT(), ...(p.perms || {}) } })
+      setCpCols(cols || []); setCpPerms(pm); setCpBusy(false)
+    })()
+    return () => { alive = false }
+  }, [cpSheet, cpUser])
+
+  const cpToggle = (colKey, ctrl) => setCpPerms(pm => ({ ...pm, [colKey]: { ...pm[colKey], [ctrl]: !pm[colKey]?.[ctrl] } }))
+  const cpToggleAll = (ctrl) => setCpPerms(pm => {
+    const turnOn = cpCols.some(c => !pm[c.key]?.[ctrl])   // if any is off, turn all on; else all off
+    const nv = {}; cpCols.forEach(c => { nv[c.key] = { ...pm[c.key], [ctrl]: turnOn } }); return nv
+  })
+  async function cpSave() {
+    if (!cpSheet || !cpUser) return
+    setCpBusy(true)
+    const rows = cpCols.map(c => ({ sheet_id: cpSheet, user_id: cpUser, col_key: c.key, perms: cpPerms[c.key] || CP_DEFAULT() }))
+    const { error } = await supabase.from('column_permissions').upsert(rows, { onConflict: 'sheet_id,user_id,col_key' })
+    setCpBusy(false)
+    setMsg(error ? ('Save failed: ' + error.message) : 'Column permissions saved ✓')
+  }
 
   return (
     <div className="admin">
@@ -128,6 +177,7 @@ export default function AdminPanel() {
       <div className="admin-tabs">
         <button className={tab === 'users' ? 'on' : ''} onClick={() => setTab('users')}>Users ({users.length})</button>
         <button className={tab === 'access' ? 'on' : ''} onClick={() => setTab('access')}>Access</button>
+        <button className={tab === 'colperms' ? 'on' : ''} onClick={() => setTab('colperms')}>Column Permissions</button>
         <button className={tab === 'allowlist' ? 'on' : ''} onClick={() => setTab('allowlist')}>Allowed emails ({allow.length})</button>
         <button className={tab === 'requests' ? 'on' : ''} onClick={() => setTab('requests')}>Requests ({pending.length})</button>
         <button className={tab === 'migrate' ? 'on' : ''} onClick={() => setTab('migrate')}>Migrate from Smartsheet</button>
@@ -187,6 +237,66 @@ export default function AdminPanel() {
           </div>
         )
       })()}
+
+      {tab === 'colperms' && (
+        <div className="admin-card cpcard">
+          <p className="admin-hint">Pick a <b>sheet</b> and a <b>user</b>, then control what they can do with each column. Unchecked = restricted. (Super Admin always sees everything.)</p>
+          <div className="cp-pickers">
+            <select value={cpSheet} onChange={e => setCpSheet(e.target.value)}>
+              <option value="">— Select a sheet —</option>
+              {allSheets.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <select value={cpUser} onChange={e => setCpUser(e.target.value)}>
+              <option value="">— Select a user —</option>
+              {nonSuper.map(u => <option key={u.id} value={u.id}>{u.full_name || u.email}</option>)}
+            </select>
+          </div>
+
+          {!cpSheet || !cpUser ? (
+            <div className="admin-empty">Select a sheet and a user to configure column permissions.</div>
+          ) : cpBusy && !cpCols.length ? (
+            <div className="admin-empty">Loading…</div>
+          ) : cpCols.length === 0 ? (
+            <div className="admin-empty">This sheet has no columns.</div>
+          ) : (
+            <>
+              <div className="cp-scroll">
+                <table className="cp-table">
+                  <thead>
+                    <tr>
+                      <th rowSpan={2} className="cp-colhead">Columns</th>
+                      {CP_GROUPS.map(g => <th key={g.title} colSpan={g.keys.length} className="cp-group">{g.title}</th>)}
+                    </tr>
+                    <tr>
+                      {CP_KEYS.map(([k, label]) => (
+                        <th key={k} className="cp-ctrl">
+                          <label title={`Toggle "${label}" for all columns`}>
+                            <input type="checkbox" checked={cpCols.length > 0 && cpCols.every(c => cpPerms[c.key]?.[k])} onChange={() => cpToggleAll(k)} /> {label}
+                          </label>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cpCols.map(c => (
+                      <tr key={c.key}>
+                        <td className="cp-colname">{c.label}{c.type ? <em> · {c.type}</em> : null}</td>
+                        {CP_KEYS.map(([k]) => (
+                          <td key={k} className="cp-cell"><input type="checkbox" checked={!!cpPerms[c.key]?.[k]} onChange={() => cpToggle(c.key, k)} /></td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="cp-actions">
+                <button className="btn ghost sm" disabled={cpBusy} onClick={() => { const nv = {}; cpCols.forEach(c => nv[c.key] = CP_DEFAULT()); setCpPerms(nv) }}>Reset (all on)</button>
+                <button className="btn" disabled={cpBusy} onClick={cpSave}>✓ Save permissions</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {tab === 'access' && (
         <div className="admin-card">
