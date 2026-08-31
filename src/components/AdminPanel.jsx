@@ -171,7 +171,7 @@ export default function AdminPanel() {
 
             <div className="u-sec">
               <span className="u-sec-tag admin-tag">Admin Users</span>
-              <span className="u-legend"><i className="dot owner" />Owner <i className="dot super" />Super Admin <i className="dot admin" />Admin</span>
+              <span className="u-legend"><i className="dot d-owner" />Owner <i className="dot d-super" />Super Admin <i className="dot d-adm" />Admin</span>
             </div>
             <div className="ulist">
               {admins.length ? admins.map(renderRow) : <div className="admin-empty">No admins match.</div>}
