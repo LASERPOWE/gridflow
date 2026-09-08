@@ -165,7 +165,12 @@ export default function AdminPanel() {
     const rows = cpCols.map(c => ({ sheet_id: cpSheet, user_id: cpUser, col_key: c.key, perms: cpPerms[c.key] || CP_DEFAULT() }))
     const { error } = await supabase.from('column_permissions').upsert(rows, { onConflict: 'sheet_id,user_id,col_key' })
     setCpBusy(false)
-    setMsg(error ? ('Save failed: ' + error.message) : 'Column permissions saved ✓')
+    if (!error) { setMsg('Column permissions saved ✓'); return }
+    // The table may not be set up yet — give a clear, actionable message.
+    const missing = /column_permissions/i.test(error.message) && /(does not exist|schema cache|find the table)/i.test(error.message)
+    setMsg(missing
+      ? '⚙ One-time setup needed: run the provided column_permissions SQL once in Supabase → SQL Editor, then Save again.'
+      : ('Save failed: ' + error.message))
   }
 
   return (
