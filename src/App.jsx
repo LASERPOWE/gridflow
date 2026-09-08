@@ -175,6 +175,7 @@ function Workspace() {
   const [firstWsId, setFirstWsId] = useState(null)
   const [sheet, setSheet] = useState(null)
   const [cols, setCols] = useState([])
+  const [colPerms, setColPerms] = useState({})   // { colKey: {view,edit,filter,...} } for the current (non-admin) user on the open sheet
   const [rows, setRows] = useState([])
   const [quick, setQuick] = useState('')
   const [showImport, setShowImport] = useState(false)
@@ -478,6 +479,11 @@ function Workspace() {
     setSheet(s); setLoading(true); setErr('')
     const { data: c } = await supabase.from('sheet_columns').select('*').eq('sheet_id', s.id).order('position')
     setCols(c || [])
+    // Load this user's per-column permissions (admins/super see everything).
+    if (!isAdmin && profile?.id) {
+      const { data: cp } = await supabase.from('column_permissions').select('col_key,perms').eq('sheet_id', s.id).eq('user_id', profile.id)
+      const map = {}; (cp || []).forEach(r => { map[r.col_key] = r.perms || {} }); setColPerms(map)
+    } else { setColPerms({}) }
     // Stable row order: created_at, then id as tie-breaker so rows never "jump"
     // between reloads (blank sheets insert many rows with the same created_at).
     const { data: r, error } = await supabase.from('rows').select('*').eq('sheet_id', s.id)
@@ -489,6 +495,12 @@ function Workspace() {
   }
 
   const isWO = sheet?.kind === 'work_orders'
+  // Columns a non-admin user may see/enter in the form (admin-set permissions).
+  // No stored row for a column = full access (backward compatible).
+  const formCols = useMemo(() => cols.filter(c => {
+    const p = colPerms[c.key]
+    return !p || (p.view !== false && p.entry !== false)
+  }), [cols, colPerms])
 
   const colDefs = useMemo(() => {
     const defs = [{ headerName: '', valueGetter: p => p.node.rowIndex + 1, width: canWrite ? 62 : 46, pinned: 'left', cellClass: 'col-idx', sortable: false, filter: false,
@@ -1297,7 +1309,7 @@ function Workspace() {
 
         <div className={'grid-wrap' + (showForm ? '' : (theme === 'dark' ? ' ag-theme-quartz-dark' : ' ag-theme-quartz')) + (gridLines ? ' grid-lines' : ' grid-off')} onPaste={handlePaste}>
           {showForm ? (
-            <FormEntry sheet={sheet} cols={cols} onSubmitted={() => { selectSheet(sheet); toast('Entry added ✓') }} />
+            <FormEntry sheet={sheet} cols={formCols} onSubmitted={() => { selectSheet(sheet); toast('Entry added ✓') }} />
           ) : (sheet && isNarrow) ? (
             <MobileCards cols={cols} rows={rows} canWrite={canWrite}
               resolveCell={resolveCell} onSave={saveCell} onAdd={addMobileRow} />
