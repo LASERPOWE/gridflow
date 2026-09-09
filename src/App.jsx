@@ -21,6 +21,7 @@ import FormulaEditor, { FN_LIST, formulaBridge } from './components/FormulaEdito
 import FormEntry from './components/FormEntry.jsx'
 import MobileCards from './components/MobileCards.jsx'
 import Tour from './components/Tour.jsx'
+import Splash from './components/Splash.jsx'
 
 // smartsheet logo mark (reused)
 function Mark({ size = 20 }) {
@@ -1624,7 +1625,7 @@ function Workspace() {
 
 function Gate() {
   const { session, loading } = useAuth()
-  if (loading) return <div className="center">Loading…</div>
+  if (loading) return <Splash />
   if (!session) return <Login />
   return <Workspace />
 }
