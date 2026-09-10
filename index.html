@@ -28,7 +28,9 @@
     </div>
     <div id="root"></div>
     <script>
-      setTimeout(function(){var s=document.getElementById('splash');if(s){s.classList.add('hide');setTimeout(function(){s.remove()},600)}},1800)
+      // Safety fallback only — React removes this splash as soon as it mounts
+      // (main.jsx). Prevents a stuck splash if the JS bundle ever fails to load.
+      setTimeout(function(){var s=document.getElementById('splash');if(s){s.classList.add('hide');setTimeout(function(){s.remove()},600)}},15000)
     </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
