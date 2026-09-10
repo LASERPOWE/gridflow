@@ -22,6 +22,9 @@ import FormEntry from './components/FormEntry.jsx'
 import MobileCards from './components/MobileCards.jsx'
 import Tour from './components/Tour.jsx'
 import Splash from './components/Splash.jsx'
+import FileImportModal from './components/FileImportModal.jsx'
+import Dashboard from './components/Dashboard.jsx'
+import * as XLSX from 'xlsx'
 
 // smartsheet logo mark (reused)
 function Mark({ size = 20 }) {
@@ -180,6 +183,8 @@ function Workspace() {
   const [rows, setRows] = useState([])
   const [quick, setQuick] = useState('')
   const [showImport, setShowImport] = useState(false)
+  const [showFileImport, setShowFileImport] = useState(false)  // import rows from Excel/CSV file
+  const [showDash, setShowDash] = useState(false)              // dashboard (charts) view
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
   const [view, setView] = useState('browse')
@@ -1062,6 +1067,23 @@ function Workspace() {
     URL.revokeObjectURL(url)
   }
 
+  // ---- Excel (.xlsx) export — proper spreadsheet with a header row ----
+  function exportXlsx() {
+    if (!sheet) return
+    const dataRows = rows.filter(r => r?.id)
+    const aoa = [cols.map(c => c.label)]
+    dataRows.forEach(r => aoa.push(cols.map(c => {
+      const v = r.data?.[c.key]
+      return v == null ? '' : v
+    })))
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    ws['!cols'] = cols.map(c => ({ wch: Math.max(12, Math.min(40, (c.label || '').length + 6)) }))
+    const wb = XLSX.utils.book_new()
+    const safe = (sheet.name || 'Sheet').replace(/[\\/?*[\]:]/g, '').slice(0, 31) || 'Sheet'
+    XLSX.utils.book_append_sheet(wb, ws, safe)
+    XLSX.writeFile(wb, (sheet.name || 'sheet') + '.xlsx')
+  }
+
   async function addRow() {
     if (!sheet) return
     const { data, error } = await supabase.from('rows')
@@ -1272,10 +1294,13 @@ function Workspace() {
           <button className={'tbtn icon' + (wrap ? ' on' : '')} title="Wrap text in cells" onClick={() => setWrap(w => !w)}>↩</button>
           <button className="tbtn" title="Conditional colour rules (e.g. overdue = red)" onClick={() => setRulesDlg(true)}>🎯 Rules</button>
           <span className="sep" />
+          <button className="tbtn" title="Download as Excel (.xlsx)" onClick={exportXlsx}>⬇ Excel</button>
           <button className="tbtn" title="Download as CSV" onClick={exportCsv}>⬇ CSV</button>
+          {sheet && <button className={'tbtn' + (showDash ? ' on' : '')} title="Dashboard — charts & totals" onClick={() => setShowDash(d => !d)}>📊 Dashboard</button>}
           {sheet && <button className="tbtn primary" title="Share this sheet by email" onClick={() => setShowShare(true)}>🔗 Share</button>}</>}
           {isAdmin && !showForm && <><span className="sep" />
-          <button className="tbtn" title="Import from Smartsheet" onClick={() => setShowImport(true)}>⬇ Import</button></>}
+          {sheet && canWrite && <button className="tbtn" title="Import rows from an Excel / CSV file" onClick={() => setShowFileImport(true)}>⬇ Excel/CSV</button>}
+          <button className="tbtn" title="Import from Smartsheet" onClick={() => setShowImport(true)}>⬇ Smartsheet</button></>}
           <span className="spacer" />
           <input id="gf-search" className="search" placeholder="🔍 Search…" value={quick} onChange={e => setQuickFilter(e.target.value)} />
           {saved === 'saving' && <span className="saved-pill saving">Saving…</span>}
@@ -1327,6 +1352,8 @@ function Workspace() {
         <div className={'grid-wrap' + (showForm ? '' : (theme === 'dark' ? ' ag-theme-quartz-dark' : ' ag-theme-quartz')) + (gridLines ? ' grid-lines' : ' grid-off')} onPaste={handlePaste}>
           {showForm ? (
             <FormEntry sheet={sheet} cols={formCols} onSubmitted={() => { selectSheet(sheet); toast('Entry added ✓') }} />
+          ) : (showDash && sheet) ? (
+            <Dashboard sheet={sheet} cols={cols} rows={rows} />
           ) : (sheet && isNarrow) ? (
             <MobileCards cols={cols} rows={rows} canWrite={canWrite}
               resolveCell={resolveCell} onSave={saveCell} onAdd={addMobileRow} />
@@ -1417,6 +1444,12 @@ function Workspace() {
 
       {showImport && (
         <ImportModal workspaceId={firstWsId} onClose={() => setShowImport(false)} onDone={(s) => { setShowImport(false); loadTree(s.id) }} />
+      )}
+
+      {showFileImport && sheet && (
+        <FileImportModal sheet={sheet} cols={cols}
+          onClose={() => setShowFileImport(false)}
+          onDone={(n) => { setShowFileImport(false); toast(`Imported ${n} rows ✓`); selectSheet(sheet) }} />
       )}
 
       {showReq && <RequestAccess sheet={sheet} onClose={() => setShowReq(false)} />}
