@@ -478,21 +478,37 @@ function Workspace() {
     const switching = !sheet || sheet.id !== s.id
     if (switching) { setBusyLabel(s.name); setBusy(true) }
     setSheet(s); setLoading(true); setErr('')
-    const { data: c } = await supabase.from('sheet_columns').select('*').eq('sheet_id', s.id).order('position')
-    setCols(c || [])
-    // Load this user's per-column permissions (admins/super see everything).
+    const PAGE = 1000   // show the first page instantly; backfill the rest in the background
+    // Fetch columns + this user's permissions + the first page of rows ALL AT ONCE
+    // (parallel) so the sheet opens fast instead of waiting query-by-query.
+    const permsQuery = (!isAdmin && profile?.id)
+      ? supabase.from('column_permissions').select('col_key,perms').eq('sheet_id', s.id).eq('user_id', profile.id)
+      : Promise.resolve({ data: [] })
+    const [colsRes, permsRes, rowsRes] = await Promise.all([
+      supabase.from('sheet_columns').select('*').eq('sheet_id', s.id).order('position'),
+      permsQuery,
+      supabase.from('rows').select('*').eq('sheet_id', s.id)
+        .order('created_at', { ascending: true }).order('id', { ascending: true }).limit(PAGE),
+    ])
+    setCols(colsRes.data || [])
     if (!isAdmin && profile?.id) {
-      const { data: cp } = await supabase.from('column_permissions').select('col_key,perms').eq('sheet_id', s.id).eq('user_id', profile.id)
-      const map = {}; (cp || []).forEach(r => { map[r.col_key] = r.perms || {} }); setColPerms(map)
+      const map = {}; (permsRes.data || []).forEach(r => { map[r.col_key] = r.perms || {} }); setColPerms(map)
     } else { setColPerms({}) }
-    // Stable row order: created_at, then id as tie-breaker so rows never "jump"
-    // between reloads (blank sheets insert many rows with the same created_at).
-    const { data: r, error } = await supabase.from('rows').select('*').eq('sheet_id', s.id)
-      .order('created_at', { ascending: true }).order('id', { ascending: true }).limit(20000)
-    if (error) setErr(error.message)
-    setRows(r || []); setLoading(false)
+    if (rowsRes.error) setErr(rowsRes.error.message)
+    const first = rowsRes.data || []
+    setRows(first); setLoading(false)
     setRecents(prev => [s, ...prev.filter(x => x.id !== s.id)].slice(0, 8))
     if (switching) window.setTimeout(() => setBusy(false), 120)
+    // A big sheet still opens instantly — pull the remaining rows in the background.
+    if (first.length === PAGE) {
+      (async () => {
+        const { data: more } = await supabase.from('rows').select('*').eq('sheet_id', s.id)
+          .order('created_at', { ascending: true }).order('id', { ascending: true }).range(PAGE, 20000)
+        if (more && more.length && sheetRef.current?.id === s.id) {
+          setRows(prev => { const seen = new Set(prev.map(r => r.id)); return [...prev, ...more.filter(r => !seen.has(r.id))] })
+        }
+      })()
+    }
   }
 
   const isWO = sheet?.kind === 'work_orders'
