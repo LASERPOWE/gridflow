@@ -17,11 +17,24 @@ function roleInfo(u) {
   return { label: 'User', cls: 'user' }
 }
 
-// Per-column control matrix (matches the reference layout).
+// Per-column control matrix. Each control has an icon + a plain-language
+// tooltip so anyone can identify what it does at a glance.
 const CP_GROUPS = [
-  { title: 'Entry Controls', keys: [['entry', 'Entry'], ['retain', 'Retain']] },
-  { title: 'View Controls', keys: [['view', 'View'], ['freeze', 'Freeze'], ['filter', 'Filter'], ['quickFilter', 'Quick Filter'], ['spotlight', 'Spotlight']] },
-  { title: 'Edit Controls', keys: [['edit', 'Edit'], ['bulkEdit', 'Bulk edit']] },
+  { title: 'Entry Controls', keys: [
+    ['entry', 'Entry', '📝', 'User can enter data in this column'],
+    ['retain', 'Retain', '📌', 'Keeps the last value ready for the next entry'],
+  ] },
+  { title: 'View Controls', keys: [
+    ['view', 'View', '👁', 'User can see this column'],
+    ['freeze', 'Freeze', '❄️', 'Freeze / pin this column while scrolling'],
+    ['filter', 'Filter', '🔎', 'User can filter rows by this column'],
+    ['quickFilter', 'Quick Filter', '⚡', 'Show a quick-filter chip for this column'],
+    ['spotlight', 'Spotlight', '💡', 'Highlight this column so it stands out'],
+  ] },
+  { title: 'Edit Controls', keys: [
+    ['edit', 'Edit', '✏️', 'User can edit existing values in this column'],
+    ['bulkEdit', 'Bulk edit', '📋', 'User can edit many rows of this column at once'],
+  ] },
 ]
 const CP_KEYS = CP_GROUPS.flatMap(g => g.keys)
 const CP_DEFAULT = () => Object.fromEntries(CP_KEYS.map(([k]) => [k, true]))
@@ -47,6 +60,7 @@ export default function AdminPanel() {
   const [cpCols, setCpCols] = useState([])   // sheet_columns of the picked sheet
   const [cpPerms, setCpPerms] = useState({}) // { colKey: { view:true, edit:true, ... } }
   const [cpBusy, setCpBusy] = useState(false)
+  const [cpModal, setCpModal] = useState(false)   // permissions matrix opens as a popup
 
   const load = useCallback(async () => {
     const [u, a, r, o, d, w, s, g] = await Promise.all([
@@ -243,9 +257,12 @@ export default function AdminPanel() {
         )
       })()}
 
-      {tab === 'colperms' && (
+      {tab === 'colperms' && (() => {
+        const sheetName = allSheets.find(s => s.id === cpSheet)?.name || ''
+        const userName = (nonSuper.find(u => u.id === cpUser) || {}).full_name || (nonSuper.find(u => u.id === cpUser) || {}).email || ''
+        return (
         <div className="admin-card cpcard">
-          <p className="admin-hint">Pick a <b>sheet</b> and a <b>user</b>, then control what they can do with each column. Unchecked = restricted. (Super Admin always sees everything.)</p>
+          <p className="admin-hint">Pick a <b>sheet</b> and a <b>user</b>, then open the popup to control each column. Hover any control to see what it does. (Super Admin always sees everything.)</p>
           <div className="cp-pickers">
             <select value={cpSheet} onChange={e => setCpSheet(e.target.value)}>
               <option value="">— Select a sheet —</option>
@@ -255,53 +272,70 @@ export default function AdminPanel() {
               <option value="">— Select a user —</option>
               {nonSuper.map(u => <option key={u.id} value={u.id}>{u.full_name || u.email}</option>)}
             </select>
+            <button className="btn" disabled={!cpSheet || !cpUser} onClick={() => setCpModal(true)}>⚙ Open column permissions</button>
           </div>
+          {(!cpSheet || !cpUser) && <div className="admin-empty">Select a sheet and a user to begin.</div>}
+          {cpSheet && cpUser && !cpModal && <div className="admin-empty">Ready — click “Open column permissions”.</div>}
 
-          {!cpSheet || !cpUser ? (
-            <div className="admin-empty">Select a sheet and a user to configure column permissions.</div>
-          ) : cpBusy && !cpCols.length ? (
-            <div className="admin-empty">Loading…</div>
-          ) : cpCols.length === 0 ? (
-            <div className="admin-empty">This sheet has no columns.</div>
-          ) : (
-            <>
-              <div className="cp-scroll">
-                <table className="cp-table">
-                  <thead>
-                    <tr>
-                      <th rowSpan={2} className="cp-colhead">Columns</th>
-                      {CP_GROUPS.map(g => <th key={g.title} colSpan={g.keys.length} className="cp-group">{g.title}</th>)}
-                    </tr>
-                    <tr>
-                      {CP_KEYS.map(([k, label]) => (
-                        <th key={k} className="cp-ctrl">
-                          <label title={`Toggle "${label}" for all columns`}>
-                            <input type="checkbox" checked={cpCols.length > 0 && cpCols.every(c => cpPerms[c.key]?.[k])} onChange={() => cpToggleAll(k)} /> {label}
-                          </label>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cpCols.map(c => (
-                      <tr key={c.key}>
-                        <td className="cp-colname">{c.label}{c.type ? <em> · {c.type}</em> : null}</td>
-                        {CP_KEYS.map(([k]) => (
-                          <td key={k} className="cp-cell"><input type="checkbox" checked={!!cpPerms[c.key]?.[k]} onChange={() => cpToggle(c.key, k)} /></td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {cpModal && cpSheet && cpUser && (
+            <div className="cp-ov" onClick={() => setCpModal(false)}>
+              <div className="cp-modal" onClick={e => e.stopPropagation()}>
+                <div className="cp-mhead">
+                  <div>
+                    <div className="cp-mtitle">Update Column Permissions</div>
+                    <div className="cp-msub"><b>{sheetName}</b> · {userName} — untick a control to take it away.</div>
+                  </div>
+                  <button className="cp-x" onClick={() => setCpModal(false)}>✕</button>
+                </div>
+                <div className="cp-mbody">
+                  {cpBusy && !cpCols.length ? (
+                    <div className="admin-empty">Loading…</div>
+                  ) : cpCols.length === 0 ? (
+                    <div className="admin-empty">This sheet has no columns.</div>
+                  ) : (
+                    <div className="cp-scroll">
+                      <table className="cp-table">
+                        <thead>
+                          <tr>
+                            <th rowSpan={2} className="cp-colhead">Columns</th>
+                            {CP_GROUPS.map(g => <th key={g.title} colSpan={g.keys.length} className="cp-group">{g.title}</th>)}
+                          </tr>
+                          <tr>
+                            {CP_KEYS.map(([k, label, icon, desc]) => (
+                              <th key={k} className="cp-ctrl" title={desc}>
+                                <span className="cp-ic">{icon}</span>
+                                <label title={`Toggle "${label}" for every column`}>
+                                  <input type="checkbox" checked={cpCols.length > 0 && cpCols.every(c => cpPerms[c.key]?.[k])} onChange={() => cpToggleAll(k)} />
+                                  <span className="cp-cl">{label}</span>
+                                </label>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cpCols.map(c => (
+                            <tr key={c.key}>
+                              <td className="cp-colname">{c.label}{c.type ? <em> · {c.type}</em> : null}</td>
+                              {CP_KEYS.map(([k, label, , desc]) => (
+                                <td key={k} className="cp-cell" title={`${label}: ${desc}`}><input type="checkbox" checked={!!cpPerms[c.key]?.[k]} onChange={() => cpToggle(c.key, k)} /></td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+                <div className="cp-mfoot">
+                  <button className="btn ghost sm" disabled={cpBusy} onClick={() => { const nv = {}; cpCols.forEach(c => nv[c.key] = CP_DEFAULT()); setCpPerms(nv) }}>Reset (all on)</button>
+                  <button className="btn" disabled={cpBusy} onClick={async () => { await cpSave() }}>✓ Save permissions</button>
+                </div>
               </div>
-              <div className="cp-actions">
-                <button className="btn ghost sm" disabled={cpBusy} onClick={() => { const nv = {}; cpCols.forEach(c => nv[c.key] = CP_DEFAULT()); setCpPerms(nv) }}>Reset (all on)</button>
-                <button className="btn" disabled={cpBusy} onClick={cpSave}>✓ Save permissions</button>
-              </div>
-            </>
+            </div>
           )}
         </div>
-      )}
+        )
+      })()}
 
       {tab === 'access' && (
         <div className="admin-card">
