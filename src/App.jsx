@@ -250,7 +250,7 @@ function Workspace() {
   const openSearch = () => setShowSearch(true)
 
   // Briefly show the loader (min duration so the animation reads as intentional).
-  function flash(label, ms = 650) {
+  function flash(label, ms = 300) {
     setBusyLabel(label || ''); setBusy(true)
     window.clearTimeout(flash._t)
     flash._t = window.setTimeout(() => setBusy(false), ms)
@@ -470,7 +470,7 @@ function Workspace() {
     // Deep-link: ?sheet=<id> (from a share email's "Open smartsheet" button) opens that sheet directly.
     let wantSheet = null
     try { wantSheet = new URLSearchParams(window.location.search).get('sheet') } catch { /* noop */ }
-    loadTree(wantSheet).finally(() => window.setTimeout(() => setBusy(false), 500))
+    loadTree(wantSheet).finally(() => setBusy(false))   // no artificial delay — show the app as soon as it's ready
     if (wantSheet) { try { window.history.replaceState({}, '', window.location.pathname) } catch { /* noop */ } }
   }, []) // eslint-disable-line
 
@@ -492,7 +492,7 @@ function Workspace() {
     if (error) setErr(error.message)
     setRows(r || []); setLoading(false)
     setRecents(prev => [s, ...prev.filter(x => x.id !== s.id)].slice(0, 8))
-    if (switching) window.setTimeout(() => setBusy(false), 450)
+    if (switching) window.setTimeout(() => setBusy(false), 120)
   }
 
   const isWO = sheet?.kind === 'work_orders'
