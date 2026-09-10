@@ -24,6 +24,9 @@ import Tour from './components/Tour.jsx'
 import Splash from './components/Splash.jsx'
 import FileImportModal from './components/FileImportModal.jsx'
 import Dashboard from './components/Dashboard.jsx'
+import HistoryPanel from './components/HistoryPanel.jsx'
+import RowComments from './components/RowComments.jsx'
+import { logActivity, logActivityMany } from './lib/activity.js'
 import * as XLSX from 'xlsx'
 
 // smartsheet logo mark (reused)
@@ -185,6 +188,9 @@ function Workspace() {
   const [showImport, setShowImport] = useState(false)
   const [showFileImport, setShowFileImport] = useState(false)  // import rows from Excel/CSV file
   const [showDash, setShowDash] = useState(false)              // dashboard (charts) view
+  const [showHistory, setShowHistory] = useState(false)        // admin audit-log drawer
+  const [commentRow, setCommentRow] = useState(null)           // row whose comments drawer is open
+  const [commentCounts, setCommentCounts] = useState({})       // { rowId: count }
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
   const [view, setView] = useState('browse')
@@ -667,7 +673,18 @@ function Workspace() {
       : e.colDef.field === 'priority' ? { priority: e.newValue }
       : { data: e.data.data }
     const { error } = await supabase.from('rows').update(patch).eq('id', e.data.id)
-    if (error) { setErr(error.message); toast(error.message, 'err'); setSaved('idle') } else { markSaved() }
+    if (error) { setErr(error.message); toast(error.message, 'err'); setSaved('idle') } else {
+      markSaved()
+      // audit trail (best-effort) — skip when an undo is replaying
+      if (!undoingRef.current) {
+        const field = e.colDef.field || ''
+        const key = field.startsWith('data.') ? field.slice(5) : field
+        const label = field === 'status' ? 'Status' : field === 'priority' ? 'Priority'
+          : (cols.find(c => c.key === key)?.label || key)
+        logActivity(profile, { sheet_id: e.data.sheet_id || sheetRef.current?.id, row_id: e.data.id,
+          action: 'edit', col_key: key, col_label: label, old_value: e.oldValue, new_value: e.newValue })
+      }
+    }
     // recompute any formulas that depend on the changed cell
     e.api.refreshCells({ force: true })
     // keep the formula bar in sync with the edited cell
@@ -870,8 +887,10 @@ function Workspace() {
     setMenu(null)
     const cell = focusedCell(); if (!cell) return setErr('Click a cell in the row to delete.')
     const node = gApi().getDisplayedRowAtIndex(cell.rowIndex); if (!node?.data) return
+    const snap = node.data.data || {}
     await supabase.from('rows').delete().eq('id', node.data.id)
     setRows(rs => rs.filter(r => r.id !== node.data.id))
+    logActivity(profile, { sheet_id: sheetRef.current?.id, row_id: node.data.id, action: 'delete_row', snapshot: snap })
   }
 
   // ---- bulk row actions (multi-select via checkboxes) ----
@@ -889,6 +908,7 @@ function Workspace() {
     setRows(rs => rs.filter(r => !ids.includes(r.id)))
     gridRef.current?.api?.deselectAll()
     setSelCount(0); markSaved(); toast(`Deleted ${ids.length} row${ids.length > 1 ? 's' : ''} ✓`)
+    logActivityMany(profile, picked.map(r => ({ sheet_id: sheetRef.current?.id, row_id: r.id, action: 'delete_row', snapshot: r.data || {} })))
   }
   async function bulkDuplicate() {
     const picked = selectedRealRows(); if (!picked.length) return
@@ -1082,6 +1102,14 @@ function Workspace() {
     const safe = (sheet.name || 'Sheet').replace(/[\\/?*[\]:]/g, '').slice(0, 31) || 'Sheet'
     XLSX.utils.book_append_sheet(wb, ws, safe)
     XLSX.writeFile(wb, (sheet.name || 'sheet') + '.xlsx')
+  }
+
+  // ---- open the comments drawer for the currently focused row ----
+  function openComments() {
+    const cell = focusedCell()
+    const node = cell ? gApi()?.getDisplayedRowAtIndex(cell.rowIndex) : null
+    if (!node?.data?.id) { toast('Click any cell in a row first, then open Comments.', 'err'); return }
+    setCommentRow(node.data)
   }
 
   async function addRow() {
@@ -1297,6 +1325,8 @@ function Workspace() {
           <button className="tbtn" title="Download as Excel (.xlsx)" onClick={exportXlsx}>⬇ Excel</button>
           <button className="tbtn" title="Download as CSV" onClick={exportCsv}>⬇ CSV</button>
           {sheet && <button className={'tbtn' + (showDash ? ' on' : '')} title="Dashboard — charts & totals" onClick={() => setShowDash(d => !d)}>📊 Dashboard</button>}
+          {sheet && <button className="tbtn" title="Comments & attachments on the selected row" onClick={openComments}>💬 Comments</button>}
+          {sheet && isAdmin && <button className="tbtn" title="Activity & history — who changed what (admin)" onClick={() => setShowHistory(true)}>🕘 History</button>}
           {sheet && <button className="tbtn primary" title="Share this sheet by email" onClick={() => setShowShare(true)}>🔗 Share</button>}</>}
           {isAdmin && !showForm && <><span className="sep" />
           {sheet && canWrite && <button className="tbtn" title="Import rows from an Excel / CSV file" onClick={() => setShowFileImport(true)}>⬇ Excel/CSV</button>}
@@ -1450,6 +1480,19 @@ function Workspace() {
         <FileImportModal sheet={sheet} cols={cols}
           onClose={() => setShowFileImport(false)}
           onDone={(n) => { setShowFileImport(false); toast(`Imported ${n} rows ✓`); selectSheet(sheet) }} />
+      )}
+
+      {showHistory && sheet && (
+        <HistoryPanel sheet={sheet} profile={profile}
+          onClose={() => setShowHistory(false)}
+          onRestored={() => selectSheet(sheet)} />
+      )}
+
+      {commentRow && sheet && (
+        <RowComments sheet={sheet} row={commentRow} profile={profile}
+          rowTitle={(() => { const c = cols[0]; const v = c && commentRow.data?.[c.key]; return v ? `${cols[0].label}: ${v}` : 'Row' })()}
+          onClose={() => setCommentRow(null)}
+          onCountChange={(rid, n) => setCommentCounts(m => ({ ...m, [rid]: n }))} />
       )}
 
       {showReq && <RequestAccess sheet={sheet} onClose={() => setShowReq(false)} />}
