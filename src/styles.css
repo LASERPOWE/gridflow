@@ -951,3 +951,24 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--ss-blue)
 .splash-bar{width:180px;height:4px;border-radius:3px;background:rgba(255,255,255,.22);overflow:hidden;margin-top:14px}
 .splash-bar span{display:block;height:100%;width:40%;border-radius:3px;background:linear-gradient(90deg,#fff,rgba(255,255,255,.6));animation:splashSlide 1.05s ease-in-out infinite}
 @keyframes splashSlide{0%{transform:translateX(-120%)}100%{transform:translateX(320%)}}
+
+/* ===== Column Permissions — popup + icon headers ===== */
+.cp-pickers .btn{white-space:nowrap}
+.cp-ov{position:fixed;inset:0;z-index:9990;background:rgba(18,24,40,.5);backdrop-filter:blur(2px);display:grid;place-items:center;padding:20px;animation:cpFade .18s ease}
+@keyframes cpFade{from{opacity:0}to{opacity:1}}
+.cp-modal{width:min(1000px,96vw);max-height:90vh;background:#fff;border-radius:16px;box-shadow:0 30px 70px rgba(12,18,35,.4);display:flex;flex-direction:column;overflow:hidden;animation:cpPop .2s cubic-bezier(.2,.8,.2,1)}
+@keyframes cpPop{from{opacity:0;transform:scale(.96) translateY(8px)}to{opacity:1;transform:none}}
+.cp-mhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:16px 20px 12px;border-bottom:1px solid var(--border)}
+.cp-mtitle{font-size:17px;font-weight:800;color:#1e2740}
+.cp-msub{font-size:12.5px;color:var(--muted);margin-top:3px}
+.cp-x{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--muted);cursor:pointer;font-size:14px;flex-shrink:0}
+.cp-x:hover{background:#f2f5fb;color:var(--text)}
+.cp-mbody{padding:14px 16px;overflow:auto;flex:1}
+.cp-mbody .cp-scroll{max-height:none;border:1px solid var(--border);border-radius:12px}
+.cp-mfoot{display:flex;justify-content:flex-end;gap:10px;padding:12px 20px 16px;border-top:1px solid var(--border)}
+/* icon + label stacked in each control header */
+.cp-ctrl{vertical-align:bottom}
+.cp-ic{display:block;font-size:16px;line-height:1;margin-bottom:3px}
+.cp-ctrl label{display:inline-flex;align-items:center;gap:5px;cursor:pointer;justify-content:center}
+.cp-cl{font-size:11px;font-weight:700;color:#4a5670}
+.cp-cell{cursor:pointer}
