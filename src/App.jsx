@@ -1461,7 +1461,7 @@ function Workspace() {
         </SimpleModal>
       )}
 
-      {showTour && <Tour onClose={closeTour} />}
+      {showTour && <Tour onClose={closeTour} isAdmin={isAdmin} />}
 
       {bulkConfirm && (
         <SimpleModal title={`Delete ${selCount} row${selCount > 1 ? 's' : ''}?`} onClose={() => setBulkConfirm(false)}>
